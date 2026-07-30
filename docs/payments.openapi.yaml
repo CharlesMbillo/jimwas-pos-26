@@ -1,0 +1,84 @@
+openapi: 3.0.1
+info:
+  title: JIMWAS Payments API
+  version: 1.0.0
+paths:
+  /api/payments/initiate:
+    post:
+      summary: Initiate a payment (KCB BUNI)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentRequest'
+      responses:
+        '200':
+          description: Payment initiation response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+  /api/kcb-buni/mpesa/callback:
+    post:
+      summary: KCB BUNI M-Pesa callback (webhook)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KcbCallbackEnvelope'
+      responses:
+        '200':
+          description: acknowledgement
+components:
+  schemas:
+    PaymentRequest:
+      type: object
+      required:
+        - phoneNumber
+        - amount
+        - invoiceNumber
+        - callbackUrl
+      properties:
+        phoneNumber:
+          type: string
+          example: '254700123456'
+        amount:
+          type: string
+          example: '100'
+        invoiceNumber:
+          type: string
+          example: 'KCBTILLNO-JIMWAS001'
+        sharedShortCode:
+          type: boolean
+        orgShortCode:
+          type: string
+        orgPassKey:
+          type: string
+        callbackUrl:
+          type: string
+        transactionDescription:
+          type: string
+    PaymentResponse:
+      type: object
+      properties:
+        provider:
+          type: string
+        merchantRequestId:
+          type: string
+        checkoutRequestId:
+          type: string
+        providerTransactionId:
+          type: string
+        responseCode:
+          type: string
+        responseMessage:
+          type: string
+        status:
+          type: string
+    KcbCallbackEnvelope:
+      type: object
+      properties:
+        stkCallback:
+          type: object

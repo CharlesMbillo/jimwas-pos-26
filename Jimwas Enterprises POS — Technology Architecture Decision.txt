@@ -1,0 +1,212 @@
+Jimwas Enterprises POS — Technology Architecture Decision
+
+Proceed
+Proceed by adapting all new development to the existing Jimwas Enterprises POS architecture rather than introducing a new technology stack such as TypeORM. The project has been consistently designed around Express.js, Prisma ORM, Neon PostgreSQL, Dexie.js, and a React + TypeScript frontend with an offline-first synchronization model. Maintaining this architecture ensures consistency, reduces technical debt, simplifies maintenance, and avoids unnecessary migration effort.
+
+Approved Technology Stack
+Backend
+* Framework: Express.js
+* Language: TypeScript
+* API Style: RESTful APIs (with future GraphQL compatibility if required)
+* Authentication: JWT-based authentication with Role-Based Access Control (RBAC)
+* Optional Future Authentication: Auth.js or Clerk
+Database
+* Primary Database: Neon PostgreSQL
+* ORM: Prisma ORM
+* Schema Management: Prisma Migrations
+* Connection Pooling: Neon Serverless Driver
+* Environment: Development, Staging, and Production databases
+Frontend
+* React
+* TypeScript
+* Vite
+* TanStack Router
+* Tailwind CSS v4
+* shadcn/ui
+* Radix UI
+Offline Architecture
+* Dexie.js (IndexedDB)
+* Offline-first data storage
+* Background synchronization engine
+* Automatic conflict detection and resolution
+* Queue-based synchronization
+* Resilient operation during intermittent internet connectivity
+Storage
+* Cloudflare R2 (preferred)
+* Amazon S3 (alternative)
+* Used for:
+o Product images
+o Supplier documents
+o Receipts
+o Attachments
+o Reports
+o Exported files
+System Architecture
+                    React + TypeScript + Vite
+                               ?
+                               ?
+                        Express.js API
+                               ?
+                 JWT Authentication + RBAC
+                               ?
+                               ?
+                         Prisma ORM
+                               ?
+                               ?
+                     Neon PostgreSQL Database
+                               ?
+                               ?
+                 Offline Sync Engine (Background)
+                               ?
+                               ?
+                   Dexie.js (IndexedDB Cache)
+Why This Architecture
+1. Neon PostgreSQL
+Neon provides a modern, serverless PostgreSQL platform that aligns well with enterprise applications.
+Benefits include:
+* Native PostgreSQL compatibility
+* Excellent Prisma support
+* Automatic scaling
+* Branching for development and testing
+* Reliable backups
+* High availability
+* Low operational overhead
+Neon serves as the authoritative source of all business data.
+2. Prisma ORM
+Prisma is the approved ORM because it provides:
+* Type-safe database queries
+* Automatic TypeScript types
+* Schema-driven development
+* Easy migrations
+* Excellent developer experience
+* Strong PostgreSQL support
+* Reduced runtime errors
+All database models, migrations, and relationships should continue to be managed through Prisma.
+3. Express.js
+Express remains the backend framework responsible for:
+* Authentication
+* Authorization
+* Business logic
+* Inventory management
+* Sales processing
+* Payment integrations
+* Reporting
+* Synchronization APIs
+* External integrations
+This keeps business logic centralized and independent of the frontend.
+4. React + TypeScript
+The frontend provides:
+* Modern component architecture
+* Strong typing
+* Fast development with Vite
+* Responsive interfaces
+* Modular feature development
+* Enterprise-grade maintainability
+5. Dexie.js
+Dexie provides the offline database used by field devices and POS terminals.
+Responsibilities include:
+* Local inventory cache
+* Offline sales
+* Offline customer records
+* Transaction queue
+* Local settings
+* Automatic synchronization once connectivity is restored
+This enables uninterrupted operation even during internet outages.
+Offline-First Synchronization Strategy
+The synchronization engine should follow this workflow:
+User Action
+      ?
+      ?
+Write to IndexedDB (Dexie)
+      ?
+      ?
+Immediate UI Update
+      ?
+      ?
+Queue Synchronization Task
+      ?
+      ?
+Internet Available?
+      ?
+ ????????????
+ ?          ?
+ No        Yes
+ ?          ?
+Store     Upload Changes
+Locally       ?
+ ?            ?
+Wait      Express API
+              ?
+              ?
+          Prisma ORM
+              ?
+              ?
+      Neon PostgreSQL
+              ?
+              ?
+ Receive Updates & Resolve Conflicts
+              ?
+              ?
+ Update Local IndexedDB
+Authentication Strategy
+Primary authentication:
+* JWT access tokens
+* Refresh tokens
+* Role-Based Access Control (RBAC)
+* Secure password hashing
+* Audit logging
+Optional future enhancements:
+* Auth.js
+* Clerk
+* Single Sign-On (SSO)
+* Multi-factor authentication (MFA)
+Storage Strategy
+Binary files should not be stored directly in PostgreSQL.
+Instead:
+* Store metadata and file references in PostgreSQL.
+* Store the actual files in Cloudflare R2 (preferred) or Amazon S3.
+Supported file types include:
+* Product images
+* Supplier invoices
+* Purchase orders
+* Delivery notes
+* Customer attachments
+* PDF receipts
+* Exported reports
+Core Business Modules
+The architecture supports:
+* User Management
+* Role-Based Access Control
+* Inventory Management
+* Product Catalog
+* Sales & POS
+* Returns
+* Purchases
+* Suppliers
+* Customers
+* Payments
+* M-Pesa Integration
+* KRA eTIMS Integration
+* Stock Transfers
+* Branch Management
+* Reporting & Analytics
+* Audit Trail
+* Approval Workflow
+* Offline Synchronization
+* Notifications
+* System Settings
+Architectural Decision
+The Jimwas Enterprises POS will continue to use the following technology stack as the official architecture:
+* Frontend: React + TypeScript + Vite
+* Routing: TanStack Router
+* Styling: Tailwind CSS v4
+* UI Components: shadcn/ui + Radix UI
+* Backend: Express.js
+* ORM: Prisma ORM
+* Primary Database: Neon PostgreSQL
+* Offline Database: Dexie.js (IndexedDB)
+* Synchronization: Offline-first background sync engine
+* Authentication: JWT with RBAC (Auth.js or Clerk may be introduced later if managed authentication becomes desirable)
+* Object Storage: Cloudflare R2 (preferred) or Amazon S3
+* Deployment: Cloud-native, scalable, secure, and optimized for enterprise retail operations.
+This architecture should be treated as the baseline for all future development, ensuring consistency across modules, minimizing technical debt, and providing a scalable foundation for multi-branch retail operations, offline capability, financial integrations, and long-term growth.

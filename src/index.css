@@ -1,0 +1,116 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============ CUSTOM SCROLLBAR STYLES ============ */
+
+/* Scrollbar track (background) */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1e293b; /* slate-800 */
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-track:hover {
+  background: #334155; /* slate-700 */
+}
+
+/* Scrollbar thumb (draggable) */
+::-webkit-scrollbar-thumb {
+  background: #475569; /* slate-600 */
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #64748b; /* slate-500 */
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:active {
+  background: #94a3b8; /* slate-400 */
+}
+
+/* Horizontal scrollbar specific */
+::-webkit-scrollbar-thumb:horizontal {
+  border-radius: 4px;
+}
+
+/* Scrollbar corner (when both horizontal and vertical) */
+::-webkit-scrollbar-corner {
+  background: #1e293b; /* slate-800 */
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #475569 #1e293b;
+}
+
+/* Firefox scrollbar on hover */
+*:hover {
+  scrollbar-color: #64748b #1e293b;
+}
+
+/* Focus outline for scrollable containers */
+.scrollable:focus {
+  outline: 2px solid #10b981; /* emerald-500 */
+  outline-offset: 2px;
+}
+
+/* Smooth scrolling for keyboard navigation */
+@layer utilities {
+  .scroll-smooth-keyboard {
+    scroll-behavior: smooth;
+  }
+}
+
+/* Hide scrollbar for specific elements if needed */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Toast slide-in animation */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Overlay scrollbar style (auto-hide, appears on hover) */
+.scrollbar-overlay {
+  scrollbar-width: thin;
+}
+
+.scrollbar-overlay::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.scrollbar-overlay::-webkit-scrollbar-thumb {
+  background: transparent;
+}
+
+.scrollbar-overlay:hover::-webkit-scrollbar-thumb {
+  background: #475569;
+}
+
+.scrollbar-overlay:hover::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}

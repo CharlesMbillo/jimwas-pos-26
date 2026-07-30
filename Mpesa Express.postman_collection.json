@@ -1,0 +1,188 @@
+{
+  "info": {
+    "_postman_id": "c67608d9-0ec6-4ea9-92c7-f691a4b8f998",
+    "name": "STK Push - Paybill 522522",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "TokenRequest",
+      "request": {
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "password",
+              "value": "<Enter your Consumer Secret>",
+              "type": "string"
+            },
+            {
+              "key": "username",
+              "value": "<Enter your Consumer Key>",
+              "type": "string"
+            },
+            {
+              "key": "showPassword",
+              "value": false,
+              "type": "boolean"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "https://uat.buni.kcbgroup.com/token?grant_type=client_credentials",
+          "protocol": "https",
+          "host": ["uat","buni","kcbgroup","com"],
+          "path": ["token"],
+          "query": [
+            { "key": "grant_type", "value": "client_credentials" }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// TokenRequest → Tests",
+              "// Parses the token response and saves access_token, token_type and expiry to environment vars.",
+              "//\n// Expected token response shapes supported:",
+              "// { access_token, token_type, expires_in }",
+              "// { accessToken, tokenType, expiresIn }",
+              "// or nested under data: { data: { access_token: ... } }",
+              "",
+              "try {",
+              "  const json = pm.response.json();",
+              "  const token = json.access_token || json.accessToken || json.token || (json.data && (json.data.access_token || json.data.accessToken));",
+              "  if (!token) {",
+              "    pm.test(\"No access token found in response\", function () {",
+              "      pm.expect.fail(\"No access token field present in response JSON\");",
+              "    });",
+              "  } else {",
+              "    pm.environment.set(\"access_token\", token);",
+              "    pm.environment.set(\"token_type\", json.token_type || json.tokenType || \"Bearer\");",
+              "    const expires = json.expires_in || json.expiresIn;",
+              "    if (expires) {",
+              "      const expiresAt = Date.now() + (expires * 1000);",
+              "      pm.environment.set(\"access_token_expires_at\", expiresAt.toString());",
+              "    } else {",
+              "      // remove any old expiry if none returned",
+              "      pm.environment.unset(\"access_token_expires_at\");",
+              "    }",
+              "    pm.test(\"Access token saved to environment\", function () {",
+              "      pm.expect(pm.environment.get(\"access_token\")).to.not.be.undefined;",
+              "    });",
+              "  }",
+              "} catch (err) {",
+              "  pm.test(\"Token parse error\", function () {",
+              "    pm.expect.fail(\"Error parsing token response: \" + err.message);",
+              "  });",
+              "}"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "STK Push - Paybill 522522",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "accept", "value": "application/json" },
+          { "key": "routeCode", "value": "207" },
+          { "key": "operation", "value": "STKPush" },
+          { "key": "messageId", "value": "232323_KCBOrg_7941675" },
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{access_token}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"phoneNumber\": \"254700000000\",\n  \"amount\": \"10\",\n  \"businessShortCode\": \"522522\",\n  \"accountNumber\": \"7941675\",\n  \"invoiceNumber\": \"ONETILLNO#7941675\",\n  \"sharedShortCode\": false,\n  \"orgShortCode\": \"522522\",\n  \"orgPassKey\": \"<Enter your PassKey>\",\n  \"callbackUrl\": \"https://posthere.io/f613-4b7f-b82b\",\n  \"transactionDescription\": \"school fee payment\"\n}"
+        },
+        "url": {
+          "raw": "https://uat.buni.kcbgroup.com/mm/api/request/1.0.0/stkpush",
+          "protocol": "https",
+          "host": ["uat","buni","kcbgroup","com"],
+          "path": ["mm","api","request","1.0.0","stkpush"]
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// STK Push → Pre-request Script (advanced; optional)",
+              "// - If a valid, non-expired token exists in environment it is attached to the Authorization header.",
+              "// - Otherwise it attempts to fetch a new token from the token endpoint using consumer_key and consumer_secret env vars.",
+              "// Env vars used: consumer_key, consumer_secret, access_token, access_token_expires_at",
+              "",
+              "(function () {",
+              "  const setAuthHeader = (token) => {",
+              "    // ensure the Authorization header is set for this request",
+              "    pm.request.headers.upsert({ key: \"Authorization\", value: \"Bearer \" + token });",
+              "  };",
+              "",
+              "  const token = pm.environment.get(\"access_token\");",
+              "  const expiresAt = parseInt(pm.environment.get(\"access_token_expires_at\") || \"0\", 10);",
+              "",
+              "  // If token exists and not close to expiry (5s safety margin), use it.",
+              "  if (token && Date.now() < (expiresAt - 5000)) {",
+              "    setAuthHeader(token);",
+              "    return;",
+              "  }",
+              "",
+              "  // Need to fetch a fresh token",
+              "  const clientKey = pm.environment.get(\"consumer_key\") || pm.variables.get(\"consumer_key\");",
+              "  const clientSecret = pm.environment.get(\"consumer_secret\") || pm.variables.get(\"consumer_secret\");",
+              "",
+              "  if (!clientKey || !clientSecret) {",
+              "    console.warn(\"consumer_key/consumer_secret not set — cannot auto-refresh token. Set them as environment variables or run TokenRequest manually.\");",
+              "    return;",
+              "  }",
+              "",
+              "  const basic = btoa(clientKey + \":\" + clientSecret);",
+              "  pm.sendRequest({",
+              "    url: \"https://uat.buni.kcbgroup.com/token?grant_type=client_credentials\",",
+              "    method: \"POST\",",
+              "    header: {",
+              "      \"Authorization\": \"Basic \" + basic",
+              "    }",
+              "  }, function (err, res) {",
+              "    if (err || !res) {",
+              "      console.error(\"Token fetch failed\", err);",
+              "      return;",
+              "    }",
+              "    try {",
+              "      const json = res.json();",
+              "      const newToken = json.access_token || json.accessToken || json.token || (json.data && (json.data.access_token || json.data.accessToken));",
+              "      if (!newToken) {",
+              "        console.error(\"No access token returned from token endpoint\", json);",
+              "        return;",
+              "      }",
+              "      pm.environment.set(\"access_token\", newToken);",
+              "      pm.environment.set(\"token_type\", json.token_type || json.tokenType || \"Bearer\");",
+              "      const expires = json.expires_in || json.expiresIn;",
+              "      if (expires) {",
+              "        pm.environment.set(\"access_token_expires_at\", (Date.now() + expires * 1000).toString());",
+              "      } else {",
+              "        pm.environment.unset(\"access_token_expires_at\");",
+              "      }",
+              "      // attach the freshly fetched token to the outgoing request",
+              "      setAuthHeader(newToken);",
+              "    } catch (e) {",
+              "      console.error(\"Error parsing token response\", e);",
+              "    }",
+              "  });",
+              "})();"
+            ]
+          }
+        }
+      ],
+      "response": []
+    }
+  ]
+}
