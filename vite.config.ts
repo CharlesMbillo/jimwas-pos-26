@@ -15,8 +15,6 @@ export default defineConfig({
       '.vercel.app',
       '.vusercontent.net',
     ],
-    // Disable HMR completely - not available in preview environment
-    hmr: false,
     middlewareMode: false,
   },
   preview: {
