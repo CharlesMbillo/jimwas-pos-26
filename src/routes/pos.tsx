@@ -320,52 +320,27 @@ export function POSTerminal() {
     }
   };
 
-  // Sandbox only: simulate a KCB BUNI payment for testing
+  // Sandbox only: complete the test payment locally. This intentionally avoids
+  // depending on a deployed callback function because no real money moves.
   const handleSimulatePayment = async () => {
-    if (kcbEnvironment !== 'sandbox') return;
+    if (kcbEnvironment !== 'sandbox' || kcbSimulating) return;
+
     setKCBSimulating(true);
+    setKCBError(null);
+
     try {
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/kcb-simulate`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-        },
-        body: JSON.stringify({
-          checkoutRequestId: kcbCheckoutId || `sim-${Date.now()}`,
-          phone: kcbPhone,
-          amount: cart.reduce((s, i) => {
-            const price = i.product?.selling_price || i.price || 0;
-            return s + (price * i.quantity);
-          }, 0),
-        }),
-      });
+      const receiptNumber = `SIM${Date.now().toString(36).toUpperCase()}`;
+      const result = await completeMpesaSale(receiptNumber);
 
-      // Safely parse JSON response
-      let data;
-      try {
-        const text = await response.text();
-        if (!text) {
-          setKCBError('Empty response from KCB sandbox service');
-          return;
-        }
-        data = JSON.parse(text);
-      } catch (parseError) {
-        console.error('[v0] JSON parse error:', parseError);
-        setKCBError('Invalid response from KCB sandbox service');
-        return;
+      if (result?.success === false) {
+        throw new Error(result.error || 'Could not complete the simulated sale');
       }
 
-      if (!response.ok || !data.success) {
-        setKCBError(data?.error || 'KCB sandbox simulation failed');
-        return;
-      }
-      // Directly mark as success — don't rely on polling
-      setKCBReceiptNumber(data.receiptNumber);
+      setKCBReceiptNumber(receiptNumber);
       setKCBStatus('success');
       toast.show('KCB sandbox payment simulated successfully!');
-      await completeMpesaSale(data.receiptNumber);
     } catch (error) {
+      setKCBStatus('failed');
       setKCBError(error instanceof Error ? error.message : 'KCB sandbox simulation failed');
     } finally {
       setKCBSimulating(false);
@@ -395,6 +370,8 @@ export function POSTerminal() {
         loadData();
       }, 1500);
     }
+
+    return result;
   }, [cart, cartTotal, products, selectedCustomer, user?.id]);
 
   const parkSale = () => {
