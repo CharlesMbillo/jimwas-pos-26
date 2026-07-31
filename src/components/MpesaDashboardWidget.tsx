@@ -7,7 +7,7 @@ interface MpesaDashboardWidgetProps {
   timeRange: 'today' | 'week' | 'month';
 }
 
-export function MpesaDashboardWidget({ timeRange }: MpesaDashboardWidgetProps) {
+export function KCBDashboardWidget({ timeRange }: MpesaDashboardWidgetProps) {
   const [stats, setStats] = useState<KCBStatistics | null>(null);
   const [loading, setLoading] = useState(true);
   const [showDetails, setShowDetails] = useState(false);
@@ -36,7 +36,7 @@ export function MpesaDashboardWidget({ timeRange }: MpesaDashboardWidgetProps) {
       const data = await getKCBStatistics(sinceDate);
       setStats(data);
     } catch (error) {
-      console.error('[v0] Error loading M-Pesa statistics:', error);
+      console.error('[v0] Error loading KCB BUNI statistics:', error);
     } finally {
       setLoading(false);
     }
@@ -50,7 +50,7 @@ export function MpesaDashboardWidget({ timeRange }: MpesaDashboardWidgetProps) {
             <Smartphone className="w-6 h-6 text-green-400" />
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-white">M-Pesa Payments</h3>
+            <h3 className="text-lg font-semibold text-white">KCB BUNI STK Payments</h3>
             <p className="text-sm text-slate-400">Loading...</p>
           </div>
         </div>
@@ -70,7 +70,7 @@ export function MpesaDashboardWidget({ timeRange }: MpesaDashboardWidgetProps) {
             <Smartphone className="w-6 h-6 text-green-400" />
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-white">M-Pesa Payments</h3>
+            <h3 className="text-lg font-semibold text-white">KCB BUNI STK Payments</h3>
             <p className="text-sm text-slate-400">No data available</p>
           </div>
         </div>
@@ -86,7 +86,7 @@ export function MpesaDashboardWidget({ timeRange }: MpesaDashboardWidgetProps) {
             <Smartphone className="w-6 h-6 text-green-400" />
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-white">M-Pesa Payments</h3>
+            <h3 className="text-lg font-semibold text-white">KCB BUNI STK Payments</h3>
             <p className="text-sm text-slate-400">Real-time transaction overview</p>
           </div>
         </div>
@@ -187,7 +187,7 @@ export function MpesaDashboardWidget({ timeRange }: MpesaDashboardWidgetProps) {
       {/* Empty State */}
       {!showDetails && stats.recentTransactions.length === 0 && (
         <div className="text-center py-8 text-slate-400">
-          <p className="text-sm">No M-Pesa transactions in this period</p>
+          <p className="text-sm">No KCB BUNI STK transactions in this period</p>
         </div>
       )}
     </div>

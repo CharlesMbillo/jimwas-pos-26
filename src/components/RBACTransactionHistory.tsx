@@ -1,18 +1,22 @@
 import { useState, useEffect } from 'react';
-import { Eye, Trash2, AlertCircle, Lock, CheckCircle2, XCircle } from 'lucide-react';
+import { Eye, Trash2, AlertCircle, Lock, CheckCircle2, XCircle, Printer } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { getAllTransactions } from '../lib/db';
+import { useToast } from './Toast';
+import { getAllTransactions, getBusinessSettings, getReceiptSettings, getTransaction } from '../lib/db';
 import { hasPermission } from '../lib/permissions';
+import { printReceipt } from '../lib/print';
 import { VoidTransactionModal } from './VoidTransactionModal';
 import type { Transaction } from '../lib/types';
 
 export function RBACTransactionHistory() {
   const { user } = useAuth();
+  const toast = useToast();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [showVoidModal, setShowVoidModal] = useState(false);
   const [canVoid, setCanVoid] = useState(false);
+  const [printingId, setPrintingId] = useState<string | null>(null);
 
   useEffect(() => {
     loadTransactions();
@@ -39,6 +43,51 @@ export function RBACTransactionHistory() {
     if (!canVoid) return;
     setSelectedTransaction(transaction);
     setShowVoidModal(true);
+  };
+
+  const handlePrintReceipt = async (transaction: Transaction) => {
+    setPrintingId(transaction.id);
+    try {
+      const txn = await getTransaction(transaction.id);
+      if (!txn) {
+        toast.show('Transaction not found', 'error');
+        return;
+      }
+
+      const [business, receipt] = await Promise.all([
+        getBusinessSettings(),
+        getReceiptSettings(),
+      ]);
+
+      if (!business || !receipt) {
+        toast.show('Could not load receipt settings', 'error');
+        return;
+      }
+
+      printReceipt({
+        business,
+        receipt,
+        transaction: {
+          id: txn.id,
+          items: txn.items,
+          total_amount: txn.total_amount,
+          amount_paid: txn.amount_paid,
+          change_amount: txn.change_amount,
+          payment_method: txn.payment_method,
+          created_at: txn.created_at,
+          customer_name: txn.customer_name,
+          customer_phone: txn.customer_phone,
+          cashier_name: user?.name,
+        },
+      });
+
+      toast.show('Receipt sent to printer', 'success');
+    } catch (error) {
+      console.error('[v0] Error printing receipt:', error);
+      toast.show('Failed to print receipt', 'error');
+    } finally {
+      setPrintingId(null);
+    }
   };
 
   if (!user) return null;
@@ -119,6 +168,14 @@ export function RBACTransactionHistory() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex justify-center gap-2">
+                        <button
+                          onClick={() => handlePrintReceipt(txn)}
+                          disabled={printingId === txn.id}
+                          className="p-1 hover:bg-blue-900/30 rounded-lg transition text-blue-400 hover:text-blue-300 disabled:opacity-50"
+                          title="Print receipt"
+                        >
+                          <Printer className="w-4 h-4" />
+                        </button>
                         {canVoid && txn.status === 'completed' && (
                           <button
                             onClick={() => handleVoidClick(txn)}
@@ -127,9 +184,6 @@ export function RBACTransactionHistory() {
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
-                        )}
-                        {(!canVoid || txn.status !== 'completed') && (
-                          <span className="text-slate-600">—</span>
                         )}
                       </div>
                     </td>

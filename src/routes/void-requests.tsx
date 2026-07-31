@@ -63,11 +63,11 @@ export function VoidRequestsPage() {
   };
 
   const handleApprove = async (request: VoidRequestWithApproval) => {
-    if (!request.approvalDetails) return;
+    if (!request.approvalDetails || !user) return;
     
     setIsProcessing(true);
     try {
-      const result = await approveRequest(request.approvalDetails.id, approvalNotes);
+      const result = await approveRequest(request.approvalDetails.id, user.id, approvalNotes);
       if (result.success) {
         toast.show('Void request approved', 'success');
         setSelectedRequest(null);
@@ -85,13 +85,13 @@ export function VoidRequestsPage() {
   };
 
   const handleReject = async (request: VoidRequestWithApproval) => {
-    if (!request.approvalDetails) return;
+    if (!request.approvalDetails || !user) return;
     
     if (!confirm('Are you sure you want to reject this void request?')) return;
     
     setIsProcessing(true);
     try {
-      const result = await rejectRequest(request.approvalDetails.id, approvalNotes || 'Rejected');
+      const result = await rejectRequest(request.approvalDetails.id, user.id, approvalNotes || 'Rejected');
       if (result.success) {
         toast.show('Void request rejected', 'success');
         setSelectedRequest(null);
