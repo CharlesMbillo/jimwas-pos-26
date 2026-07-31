@@ -20,7 +20,12 @@ echo "Supabase deploy helper — apply migrations, seed DB, sync Prisma (optiona
 PRISMA_INTROSPECT=${PRISMA_INTROSPECT:-false}
 
 echo "Applying DB migrations via psql..."
-for f in migrations/0002-enable-pgcrypto-extension.sql migrations/0001-create-payments-table.sql migrations/0003-add-idempotency-key.sql; do
+# Run migrations in order. Add new migrations here as files are added.
+for f in \
+  migrations/0002-enable-pgcrypto-extension.sql \
+  migrations/0001-create-payments-table.sql \
+  migrations/0003-add-idempotency-key.sql \
+  migrations/0004-create-bill-validations.sql; do
   if [ -f "$f" ]; then
     echo "Applying $f"
     psql "$DATABASE_URL" -f "$f"
