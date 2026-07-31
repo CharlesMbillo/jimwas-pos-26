@@ -12,7 +12,6 @@ import { hasPermission } from '../lib/permissions';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/Toast';
 import { VoidTransactionModal } from '../components/VoidTransactionModal';
-import { FeatureGuard } from '../components/ProtectedRoute';
 import type { Transaction } from '../lib/types';
 import type { KCBPaymentRecord } from '../lib/db';
 
@@ -502,17 +501,15 @@ export function TransactionsPage() {
                               <Printer className="w-4 h-4" />
                             </button>
                           )}
-                          <FeatureGuard featureName="VOID_SALE">
-                            {canVoid && txn.type === 'sale' && txn.status === 'success' && (
-                              <button
-                                onClick={() => handleVoidClick(txn)}
-                                className="p-1 hover:bg-red-900/30 rounded-lg transition text-red-400 hover:text-red-300"
-                                title="Void transaction"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            )}
-                          </FeatureGuard>
+                          {canVoid && txn.type === 'sale' && txn.status === 'success' && (
+                            <button
+                              onClick={() => handleVoidClick(txn)}
+                              className="p-1 hover:bg-red-900/30 rounded-lg transition text-red-400 hover:text-red-300"
+                              title="Void transaction"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
