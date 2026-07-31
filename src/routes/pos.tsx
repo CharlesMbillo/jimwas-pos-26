@@ -956,7 +956,7 @@ export function POSTerminal() {
                         )}
                       </div>
                       <button
-                        onClick={handleMpesaPayment}
+                        onClick={handleKCBSTKPayment}
                         disabled={(kcbEnvironment !== 'sandbox' && !kcbConfigured) || !kcbPhone || kcbPhone.length < 9}
                         className="w-full py-3 bg-emerald-600 text-white rounded-lg font-bold hover:bg-emerald-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                       >
