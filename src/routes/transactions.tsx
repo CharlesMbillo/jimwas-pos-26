@@ -175,17 +175,11 @@ export function TransactionsPage() {
       await loadTransactions();
       // Check if user can void transactions based on role
       const userRole = user?.role_code;
-      console.log('[v0] User role in transactions:', userRole);
-      if (userRole === 'admin' || userRole === 'manager') {
-        setCanVoid(true);
-        console.log('[v0] canVoid set to true');
-      } else {
-        setCanVoid(false);
-        console.log('[v0] canVoid set to false');
-      }
+      const allowed = userRole === 'admin' || userRole === 'manager';
+      setCanVoid(allowed);
     };
     initPage().finally(() => setIsLoading(false));
-  }, [user]);
+  }, [user?.role_code, loadTransactions]);
 
   // Filter whenever inputs change
   useEffect(() => {

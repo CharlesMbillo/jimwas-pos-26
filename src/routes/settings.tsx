@@ -1290,9 +1290,9 @@ function UserModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-slate-800 rounded-xl w-full max-w-md p-6">
-        <div className="flex justify-between items-center mb-6">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-hidden">
+      <div className="bg-slate-800 rounded-xl w-full max-w-md max-h-[90vh] flex flex-col">
+        <div className="flex justify-between items-center p-6 border-b border-slate-700">
           <h3 className="text-xl font-bold text-white">
             {isEditing ? 'Edit User' : 'Add New User'}
           </h3>
@@ -1301,14 +1301,15 @@ function UserModal({
           </button>
         </div>
 
-        {error && (
-          <div className="flex items-center gap-2 p-3 mb-4 bg-red-900/50 border border-red-700 rounded-lg text-red-300">
-            <AlertCircle size={20} />
-            {error}
-          </div>
-        )}
+        <div className="overflow-y-auto flex-1 p-6 min-h-0">
+          {error && (
+            <div className="flex items-center gap-2 p-3 mb-4 bg-red-900/50 border border-red-700 rounded-lg text-red-300">
+              <AlertCircle size={20} />
+              {error}
+            </div>
+          )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+          <form id="user-form" onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm text-slate-400 mb-2">Full Name</label>
             <input
@@ -1386,23 +1387,26 @@ function UserModal({
             </>
           )}
 
-          <div className="flex gap-3 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 py-3 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="flex-1 py-3 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition disabled:opacity-50"
-            >
-              {saving ? 'Saving...' : isEditing ? 'Save Changes' : 'Create User'}
-            </button>
-          </div>
-        </form>
+          </form>
+        </div>
+
+        <div className="border-t border-slate-700 p-6 flex gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 py-3 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            form="user-form"
+            disabled={saving}
+            className="flex-1 py-3 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition disabled:opacity-50"
+          >
+            {saving ? 'Saving...' : isEditing ? 'Save Changes' : 'Create User'}
+          </button>
+        </div>
       </div>
     </div>
   );
