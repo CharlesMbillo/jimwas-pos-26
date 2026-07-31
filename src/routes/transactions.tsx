@@ -493,8 +493,9 @@ export function TransactionsPage() {
                       <td className="px-4 py-3">
                         <div className="flex justify-center gap-2">
                           {(() => {
+                            console.log('[v0] DEBUG - Transaction:', { type: txn.type, status: txn.status, canVoid });
                             if (txn.type === 'sale' && txn.status === 'success') {
-                              console.log('[v0] DEBUG - Sale row found, canVoid:', canVoid);
+                              console.log('[v0] DEBUG - Sale success row found, canVoid:', canVoid, 'Should show trash icon');
                             }
                             return null;
                           })()}
