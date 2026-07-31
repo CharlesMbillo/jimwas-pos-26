@@ -175,7 +175,10 @@ export function TransactionsPage() {
       await loadTransactions();
       // Check if user can void transactions based on role
       const userRole = user?.role_code;
+      console.log('[v0] DEBUG - User object:', user);
+      console.log('[v0] DEBUG - User role_code:', userRole);
       const allowed = userRole === 'admin' || userRole === 'manager';
+      console.log('[v0] DEBUG - canVoid allowed:', allowed);
       setCanVoid(allowed);
     };
     initPage().finally(() => setIsLoading(false));
@@ -489,6 +492,12 @@ export function TransactionsPage() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex justify-center gap-2">
+                          {(() => {
+                            if (txn.type === 'sale' && txn.status === 'success') {
+                              console.log('[v0] DEBUG - Sale row found, canVoid:', canVoid);
+                            }
+                            return null;
+                          })()}
                           {txn.type === 'sale' && (
                             <button
                               onClick={() => handlePrintReceipt(txn)}
