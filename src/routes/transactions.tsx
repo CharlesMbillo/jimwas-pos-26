@@ -241,10 +241,22 @@ export function TransactionsPage() {
     }
   };
 
-  const handleVoidClick = (transaction: UnifiedTransaction) => {
-    if (!canVoid || transaction.status !== 'success') return;
-    // For now, just show toast - full integration with void modal would go here
-    toast.show('Void feature available for sales transactions', 'info');
+  const handleVoidClick = async (transaction: UnifiedTransaction) => {
+    if (!canVoid || transaction.status !== 'success' || transaction.type !== 'sale') return;
+    
+    try {
+      // Fetch the full transaction details
+      const fullTransaction = await getTransaction(transaction.id);
+      if (fullTransaction) {
+        setSelectedTransaction(fullTransaction);
+        setShowVoidModal(true);
+      } else {
+        toast.show('Failed to load transaction details', 'error');
+      }
+    } catch (error) {
+      console.error('[v0] Error loading transaction:', error);
+      toast.show('Error loading transaction details', 'error');
+    }
   };
 
   const getTransactionIcon = (type: string) => {
@@ -500,6 +512,19 @@ export function TransactionsPage() {
           )}
         </div>
       </div>
+
+      {/* Void Transaction Modal */}
+      <VoidTransactionModal
+        transaction={selectedTransaction}
+        isOpen={showVoidModal}
+        onClose={() => {
+          setShowVoidModal(false);
+          setSelectedTransaction(null);
+        }}
+        onVoidComplete={() => {
+          loadTransactions();
+        }}
+      />
     </div>
   );
 }
