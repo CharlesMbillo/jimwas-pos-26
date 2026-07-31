@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Layout } from './components/Layout';
+import { ProtectedRoute } from './components/ProtectedRoute';
 import { POSTerminal } from './routes/pos';
 import { CustomersPage } from './routes/customers';
 import { ProductsPage } from './routes/products';
@@ -57,35 +58,44 @@ function AppContent() {
   }
 
   const renderPage = () => {
+    const accessDenied = (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="bg-red-900/20 border border-red-700 rounded-lg p-8 max-w-md">
+          <h1 className="text-xl font-bold text-red-400 mb-2">Access Denied</h1>
+          <p className="text-red-300">You don&apos;t have permission to access this page.</p>
+        </div>
+      </div>
+    );
+
     switch (currentPage) {
       case 'pos':
-        return <POSTerminal />;
+        return <ProtectedRoute routePath="/pos" fallback={accessDenied}><POSTerminal /></ProtectedRoute>;
       case 'customers':
-        return <CustomersPage />;
+        return <ProtectedRoute routePath="/customers" fallback={accessDenied}><CustomersPage /></ProtectedRoute>;
       case 'products':
-        return <ProductsPage />;
+        return <ProtectedRoute routePath="/products" fallback={accessDenied}><ProductsPage /></ProtectedRoute>;
       case 'inventory':
-        return <InventoryPage />;
+        return <ProtectedRoute routePath="/inventory" fallback={accessDenied}><InventoryPage /></ProtectedRoute>;
       case 'installments':
-        return <InstallmentsPage />;
+        return <ProtectedRoute routePath="/installments" fallback={accessDenied}><InstallmentsPage /></ProtectedRoute>;
       case 'dashboard':
-        return <DashboardPage />;
+        return <ProtectedRoute routePath="/dashboard" fallback={accessDenied}><DashboardPage /></ProtectedRoute>;
       case 'security':
-        return <SecurityDashboardPage />;
+        return <ProtectedRoute routePath="/security" fallback={accessDenied}><SecurityDashboardPage /></ProtectedRoute>;
       case 'settings':
-        return <SettingsPage />;
+        return <ProtectedRoute routePath="/settings" fallback={accessDenied}><SettingsPage /></ProtectedRoute>;
       case 'audit':
-        return <AuditPage />;
+        return <ProtectedRoute routePath="/audit" fallback={accessDenied}><AuditPage /></ProtectedRoute>;
       case 'transactions':
-        return <TransactionsPage />;
+        return <ProtectedRoute routePath="/transactions" fallback={accessDenied}><TransactionsPage /></ProtectedRoute>;
       case 'backup':
-        return <BackupPage />;
+        return <ProtectedRoute routePath="/backup" fallback={accessDenied}><BackupPage /></ProtectedRoute>;
       case 'populate-db':
-        return <PopulateDBPage />;
+        return <ProtectedRoute routePath="/populate-db" fallback={accessDenied}><PopulateDBPage /></ProtectedRoute>;
       case 'void-requests':
-        return <VoidRequestsPage />;
+        return <ProtectedRoute routePath="/void-requests" fallback={accessDenied}><VoidRequestsPage /></ProtectedRoute>;
       default:
-        return <POSTerminal />;
+        return <ProtectedRoute routePath="/pos" fallback={accessDenied}><POSTerminal /></ProtectedRoute>;
     }
   };
 

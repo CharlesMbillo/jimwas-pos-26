@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/Toast';
 import { initiateKCBSTKPush, pollForKCBPaymentCompletion } from '../lib/mpesa';
 import { completeSale, validatePhoneNumber, validatePrice, validateStock, sanitizeInput } from '../lib/transaction-utils';
+import { formatPhoneNumber } from '../lib/kcb';
 import { printReceipt } from '../lib/print';
 import { useDebounce } from '../hooks/useDebounce';
 import { SaleTypeSelector } from '../components/SaleTypeSelector';
@@ -259,32 +260,26 @@ export function POSTerminal() {
       return;
     }
 
-    if (!kcbPhone || kcbPhone.length < 9) {
-      setKCBError('Please enter a valid phone number');
+    const phoneValidation = validatePhoneNumber(kcbPhone);
+    if (!phoneValidation.valid) {
+      setKCBError(phoneValidation.error || 'Please enter a valid Kenyan phone number');
       return;
     }
+
+    // Format phone number to 254XXXXXXXXX format per ICDN standards
+    const formattedPhone = formatPhoneNumber(kcbPhone);
 
     setKCBStatus('initiating');
     setKCBError(null);
     setKCBStartTime(new Date());
 
-    // Sandbox: skip API call and go directly to local completion
+    // Sandbox: wait for user to confirm payment
     if (kcbEnvironment === 'sandbox') {
       try {
-        setKCBStatus('waiting');
-        toast.show('Sandbox mode: simulating STK Push...');
-        
-        // Simulate a brief STK push delay
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        
         const receiptNumber = (await import('../lib/mpesa')).generateMpesaReceiptNumber();
         setKCBCheckoutId(receiptNumber);
-        setKCBStatus('success');
-        setKCBReceiptNumber(receiptNumber);
-        toast.show('KCB sandbox payment successful!');
-        
-        // Auto-complete the sale
-        await completeKCBSTKSale(receiptNumber);
+        setKCBStatus('waiting');
+        toast.show(`Sandbox STK Push sent to ${formattedPhone}. Check your phone or click "Confirm Payment" to complete.`);
       } catch (error) {
         setKCBStatus('failed');
         setKCBError(error instanceof Error ? error.message : 'Sandbox simulation failed');
@@ -294,7 +289,7 @@ export function POSTerminal() {
 
     // Production: call real API
     try {
-      const result = await initiateKCBSTKPush(kcbPhone, cartTotal, {
+      const result = await initiateKCBSTKPush(formattedPhone, cartTotal, {
         cashierId: user?.id,
         cashierName: user?.name,
         accountReference: `POS-${Date.now()}`,
@@ -327,7 +322,7 @@ export function POSTerminal() {
         setKCBReceiptNumber(statusResult.kcbReceiptNumber || null);
         toast.show('KCB payment successful!');
         // Auto-complete the sale
-        await completeMpesaSale(statusResult.kcbReceiptNumber);
+        await completeKCBSTKSale(statusResult.kcbReceiptNumber);
       } else if (statusResult.status === 'cancelled') {
         setKCBStatus('cancelled');
         setKCBError('Payment was cancelled by user');
@@ -357,7 +352,7 @@ export function POSTerminal() {
 
     try {
       const receiptNumber = (await import('../lib/mpesa')).generateMpesaReceiptNumber();
-      const result = await completeMpesaSale(receiptNumber);
+      const result = await completeKCBSTKSale(receiptNumber);
 
       if (result?.success === false) {
         throw new Error(result.error || 'Could not complete the simulated sale');
@@ -837,7 +832,7 @@ export function POSTerminal() {
       {/* Checkout Modal */}
       {showCheckout && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 rounded-xl w-full max-w-md max-h-[90vh] flex flex-col">
+          <div className="bg-slate-800 rounded-xl w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden">
             <div className="flex justify-between items-center p-6 border-b border-slate-700 flex-shrink-0">
               <h3 className="text-xl font-bold text-white">Checkout</h3>
               <button
@@ -857,7 +852,7 @@ export function POSTerminal() {
               </button>
             </div>
 
-            <div className="overflow-y-auto flex-1 p-6 space-y-4">
+            <div className="overflow-y-auto flex-1 p-6 space-y-4 min-h-0">
               {/* Sale Type Selector */}
               <SaleTypeSelector
                 saleType={saleType}
@@ -944,11 +939,11 @@ export function POSTerminal() {
                             </button>
                           )}
                         </div>
-                        <input
-                          type="tel"
-                          value={kcbPhone}
-                          onChange={(e) => setKCBPhone(e.target.value)}
-                          placeholder={kcbEnvironment === 'sandbox' ? '254700000000 (test)' : '07XX XXX XXX'}
+                  <input
+                        type="tel"
+                        value={kcbPhone}
+                        onChange={(e) => setKCBPhone(e.target.value)}
+                        placeholder={kcbEnvironment === 'sandbox' ? '0722123456 or 254722123456' : '07XX XXX XXX'}
                           className="w-full px-4 py-3 bg-slate-600 text-white rounded-lg border border-slate-500 focus:border-emerald-500 focus:outline-none text-lg"
                         />
                         {kcbEnvironment === 'sandbox' && (
@@ -957,7 +952,7 @@ export function POSTerminal() {
                       </div>
                       <button
                         onClick={handleKCBSTKPayment}
-                        disabled={(kcbEnvironment !== 'sandbox' && !kcbConfigured) || !kcbPhone || kcbPhone.length < 9}
+                        disabled={(kcbEnvironment !== 'sandbox' && !kcbConfigured) || !validatePhoneNumber(kcbPhone).valid}
                         className="w-full py-3 bg-emerald-600 text-white rounded-lg font-bold hover:bg-emerald-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                       >
                         <Smartphone size={20} />
@@ -1034,7 +1029,7 @@ export function POSTerminal() {
 
                       {/* Sandbox simulate button */}
                       {kcbEnvironment === 'sandbox' && kcbStatus === 'waiting' && (
-                        <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-3">
+                        <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-3 sticky bottom-0 z-10">
                           <div className="flex items-center justify-between gap-3">
                             <div className="flex items-center gap-2">
                               <FlaskConical size={14} className="text-blue-400" />

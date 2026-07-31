@@ -115,7 +115,7 @@ export function TransactionsPage() {
     const stats = {
       totalTransactions: transactions.length,
       totalAmount: transactions.reduce((sum, t) => sum + t.amount, 0),
-      successCount: transactions.filter(t => t.status === 'success').length,
+      successCount: transactions.filter(t => t.status === 'completed' || t.status === 'success').length,
       failedCount: transactions.filter(t => t.status === 'failed').length,
       averageValue: transactions.length > 0 
         ? transactions.reduce((sum, t) => sum + t.amount, 0) / transactions.length 
@@ -171,9 +171,15 @@ export function TransactionsPage() {
   // Initial load
   useEffect(() => {
     setIsLoading(true);
-    loadTransactions().finally(() => setIsLoading(false));
-    setCanVoid(hasPermission(user?.role_code, 'void_transaction'));
-  }, []);
+    const initPage = async () => {
+      await loadTransactions();
+      // Check if user can void transactions based on role
+      const userRole = user?.role_code;
+      const allowed = userRole === 'admin' || userRole === 'manager';
+      setCanVoid(allowed);
+    };
+    initPage().finally(() => setIsLoading(false));
+  }, [user?.role_code, loadTransactions]);
 
   // Filter whenever inputs change
   useEffect(() => {
@@ -241,10 +247,22 @@ export function TransactionsPage() {
     }
   };
 
-  const handleVoidClick = (transaction: UnifiedTransaction) => {
-    if (!canVoid || transaction.status !== 'success') return;
-    // For now, just show toast - full integration with void modal would go here
-    toast.show('Void feature available for sales transactions', 'info');
+  const handleVoidClick = async (transaction: UnifiedTransaction) => {
+    if (!canVoid || (transaction.status !== 'completed' && transaction.status !== 'success') || transaction.type !== 'sale') return;
+    
+    try {
+      // Fetch the full transaction details
+      const fullTransaction = await getTransaction(transaction.id);
+      if (fullTransaction) {
+        setSelectedTransaction(fullTransaction);
+        setShowVoidModal(true);
+      } else {
+        toast.show('Failed to load transaction details', 'error');
+      }
+    } catch (error) {
+      console.error('[v0] Error loading transaction:', error);
+      toast.show('Error loading transaction details', 'error');
+    }
   };
 
   const getTransactionIcon = (type: string) => {
@@ -481,7 +499,7 @@ export function TransactionsPage() {
                               <Printer className="w-4 h-4" />
                             </button>
                           )}
-                          {canVoid && txn.type === 'sale' && txn.status === 'success' && (
+                          {canVoid && txn.type === 'sale' && (txn.status === 'completed' || txn.status === 'success') && (
                             <button
                               onClick={() => handleVoidClick(txn)}
                               className="p-1 hover:bg-red-900/30 rounded-lg transition text-red-400 hover:text-red-300"
@@ -500,6 +518,19 @@ export function TransactionsPage() {
           )}
         </div>
       </div>
+
+      {/* Void Transaction Modal */}
+      <VoidTransactionModal
+        transaction={selectedTransaction}
+        isOpen={showVoidModal}
+        onClose={() => {
+          setShowVoidModal(false);
+          setSelectedTransaction(null);
+        }}
+        onVoidComplete={() => {
+          loadTransactions();
+        }}
+      />
     </div>
   );
 }

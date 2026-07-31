@@ -54,11 +54,18 @@ export async function stkPush(params: { baseUrl: string; token: string; body: Re
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
+    // Generate unique message ID for KCB tracking
+    const messageId = `JIMWAS-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    
     const resp = await fetch(url, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
+        'accept': 'application/json',
+        'routeCode': '207',
+        'operation': 'STKPush',
+        'messageId': messageId,
         ...headers,
       },
       body: JSON.stringify(body),
