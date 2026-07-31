@@ -832,7 +832,7 @@ export function POSTerminal() {
       {/* Checkout Modal */}
       {showCheckout && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 rounded-xl w-full max-w-md max-h-[90vh] flex flex-col">
+          <div className="bg-slate-800 rounded-xl w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden">
             <div className="flex justify-between items-center p-6 border-b border-slate-700 flex-shrink-0">
               <h3 className="text-xl font-bold text-white">Checkout</h3>
               <button
@@ -852,7 +852,7 @@ export function POSTerminal() {
               </button>
             </div>
 
-            <div className="overflow-y-auto flex-1 p-6 space-y-4">
+            <div className="overflow-y-auto flex-1 p-6 space-y-4 min-h-0">
               {/* Sale Type Selector */}
               <SaleTypeSelector
                 saleType={saleType}
@@ -1029,7 +1029,7 @@ export function POSTerminal() {
 
                       {/* Sandbox simulate button */}
                       {kcbEnvironment === 'sandbox' && kcbStatus === 'waiting' && (
-                        <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-3">
+                        <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-3 sticky bottom-0 z-10">
                           <div className="flex items-center justify-between gap-3">
                             <div className="flex items-center gap-2">
                               <FlaskConical size={14} className="text-blue-400" />
