@@ -367,53 +367,60 @@ export async function createUser(
   createdBy: string,
   branchId?: string
 ): Promise<{ success: boolean; error?: string; user?: User }> {
-  // Check if username exists
-  const existingUser = await getUserByUsername(username);
-  if (existingUser) {
-    return { success: false, error: 'Username already exists' };
+  try {
+    // Check if username exists
+    const existingUser = await getUserByUsername(username);
+    if (existingUser) {
+      return { success: false, error: 'Username already exists' };
+    }
+
+    // Check if email exists
+    const { getUserByEmail } = await import('./db');
+    const existingEmail = await getUserByEmail(email);
+    if (existingEmail) {
+      return { success: false, error: 'Email already exists' };
+    }
+
+    // Get role
+    const role = await getRoleByCode(roleCode);
+    if (!role) {
+      return { success: false, error: 'Invalid role' };
+    }
+
+    if (password.length < 6) {
+      return { success: false, error: 'Password must be at least 6 characters' };
+    }
+
+    const passwordHash = await hashPassword(password);
+    const now = new Date().toISOString();
+
+    const user: User = {
+      id: generateId(),
+      username,
+      email,
+      password_hash: passwordHash,
+      full_name: fullName,
+      role_id: role.id,
+      role_code: roleCode,
+      branch_id: branchId,
+      is_active: true,
+      failed_login_attempts: 0,
+      created_by: createdBy,
+      created_at: now,
+      updated_at: now,
+      sync_status: 'pending',
+    };
+
+    console.log('[v0] About to save user:', user);
+    await saveUser(user);
+    console.log('[v0] User saved successfully');
+    await logAuditEvent('USER_CREATED', createdBy, 'user', user.id, `Created user ${username} with role ${roleCode}`);
+
+    return { success: true, user };
+  } catch (err) {
+    console.error('[v0] Error in createUser:', err);
+    return { success: false, error: err instanceof Error ? err.message : 'Failed to create user' };
   }
-
-  // Check if email exists
-  const { getUserByEmail } = await import('./db');
-  const existingEmail = await getUserByEmail(email);
-  if (existingEmail) {
-    return { success: false, error: 'Email already exists' };
-  }
-
-  // Get role
-  const role = await getRoleByCode(roleCode);
-  if (!role) {
-    return { success: false, error: 'Invalid role' };
-  }
-
-  if (password.length < 6) {
-    return { success: false, error: 'Password must be at least 6 characters' };
-  }
-
-  const passwordHash = await hashPassword(password);
-  const now = new Date().toISOString();
-
-  const user: User = {
-    id: generateId(),
-    username,
-    email,
-    password_hash: passwordHash,
-    full_name: fullName,
-    role_id: role.id,
-    role_code: roleCode,
-    branch_id: branchId,
-    is_active: true,
-    failed_login_attempts: 0,
-    created_by: createdBy,
-    created_at: now,
-    updated_at: now,
-    sync_status: 'pending',
-  };
-
-  await saveUser(user);
-  await logAuditEvent('USER_CREATED', createdBy, 'user', user.id, `Created user ${username} with role ${roleCode}`);
-
-  return { success: true, user };
 }
 
 // Update user status (activate/deactivate)

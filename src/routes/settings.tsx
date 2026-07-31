@@ -1260,6 +1260,7 @@ function UserModal({
           return;
         }
 
+        console.log('[v0] Creating user with:', { username: formData.username, email: formData.email, role: formData.role_code });
         const result = await createUser(
           formData.username,
           formData.email,
@@ -1269,6 +1270,7 @@ function UserModal({
           currentUserId!
         );
 
+        console.log('[v0] createUser result:', result);
         if (!result.success) {
           setError(result.error || 'Failed to create user');
           setSaving(false);
@@ -1279,7 +1281,9 @@ function UserModal({
       onSaved();
       onClose();
     } catch (err) {
-      setError('An error occurred');
+      console.error('[v0] Error in save handler:', err);
+      const errorMsg = err instanceof Error ? err.message : 'An error occurred';
+      setError(errorMsg);
     } finally {
       setSaving(false);
     }
