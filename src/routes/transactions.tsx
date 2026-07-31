@@ -171,9 +171,17 @@ export function TransactionsPage() {
   // Initial load
   useEffect(() => {
     setIsLoading(true);
-    loadTransactions().finally(() => setIsLoading(false));
-    setCanVoid(hasPermission(user?.role_code, 'void_transaction'));
-  }, []);
+    const initPage = async () => {
+      await loadTransactions();
+      // Check if user can void transactions based on role
+      if (user?.role_code === 'admin' || user?.role_code === 'manager') {
+        setCanVoid(true);
+      } else {
+        setCanVoid(false);
+      }
+    };
+    initPage().finally(() => setIsLoading(false));
+  }, [user]);
 
   // Filter whenever inputs change
   useEffect(() => {
