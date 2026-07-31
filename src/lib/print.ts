@@ -48,6 +48,17 @@ function buildReceiptHtml(options: PrintOptions): string {
     const pad = Math.max(0, Math.floor((charsPerLine - name.length) / 2));
     lines.push(' '.repeat(pad) + name);
   }
+
+  // Add Paybill and Account info if available
+  if ((business as any).business_paybill || (business as any).business_account) {
+    lines.push('');
+    if ((business as any).business_paybill) {
+      lines.push(formatLine('Paybill:', (business as any).business_paybill));
+    }
+    if ((business as any).business_account) {
+      lines.push(formatLine('Account:', (business as any).business_account));
+    }
+  }
   if (business.business_address) lines.push(business.business_address);
   if (business.business_phone) lines.push(`Tel: ${business.business_phone}`);
   if (business.business_email) lines.push(`Email: ${business.business_email}`);

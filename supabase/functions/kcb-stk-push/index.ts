@@ -158,13 +158,19 @@ Deno.serve(async (req: Request) => {
       invoiceNumber: body.transactionId || `INV-${Date.now()}`,
       orgShortCode: settings.org_shortcode,
       orgPassKey: settings.org_passkey,
-      transactionDescription: body.transactionDesc || 'POS Payment',
+      transactionDescription: body.transactionDesc || `${settings.business_name || 'POS'} Payment`,
       callbackUrl: `${supabaseUrl}/functions/v1/kcb-callback`,
       sharedShortCode: false,
+      businessPaybill: settings.business_paybill || '522522',
+      businessAccount: settings.business_account || '7941675',
+      businessName: settings.business_name || 'JIMWASENTERPRISES',
       metadata: {
         cashierId: body.cashierId,
         cashierName: body.cashierName,
         accountReference: body.accountReference,
+        paybill: settings.business_paybill,
+        account: settings.business_account,
+        businessName: settings.business_name,
       },
     };
 
