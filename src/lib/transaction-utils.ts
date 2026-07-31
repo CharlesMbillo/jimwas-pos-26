@@ -138,10 +138,33 @@ export async function completeSale({
 // Validation helpers
 export function validatePhoneNumber(phone: string): { valid: boolean; error?: string } {
   const cleaned = phone.replace(/\D/g, '');
-  if (cleaned.length < 9 || cleaned.length > 12) {
-    return { valid: false, error: 'Phone number must be 9-12 digits' };
+  
+  // Must be 10 digits (07/08/06 format) or 12 digits (254 prefix format)
+  if (cleaned.length === 10) {
+    // Must start with 0 followed by 7, 8, or 6 for Kenyan number
+    if (!/^0[7|8|6]\d{8}$/.test(cleaned)) {
+      return { valid: false, error: 'Phone must start with 07, 08, or 06' };
+    }
+    return { valid: true };
   }
-  return { valid: true };
+  
+  if (cleaned.length === 12) {
+    // Must start with 254 followed by 7, 8, or 6 for Kenyan number
+    if (!/^254[7|8|6]\d{8}$/.test(cleaned)) {
+      return { valid: false, error: 'Invalid Kenyan phone number format' };
+    }
+    return { valid: true };
+  }
+  
+  // Support +254 format
+  if (phone.startsWith('+254') && cleaned.length === 12) {
+    if (!/^254[7|8|6]\d{8}$/.test(cleaned)) {
+      return { valid: false, error: 'Invalid Kenyan phone number format' };
+    }
+    return { valid: true };
+  }
+  
+  return { valid: false, error: 'Phone must be 10 digits (07/08/06) or 12 digits (254XXXXXXXXX)' };
 }
 
 export function validateEmail(email: string): { valid: boolean; error?: string } {

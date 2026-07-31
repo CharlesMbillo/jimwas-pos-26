@@ -259,8 +259,9 @@ export function POSTerminal() {
       return;
     }
 
-    if (!kcbPhone || kcbPhone.length < 9) {
-      setKCBError('Please enter a valid phone number');
+    const phoneValidation = validatePhoneNumber(kcbPhone);
+    if (!phoneValidation.valid) {
+      setKCBError(phoneValidation.error || 'Please enter a valid Kenyan phone number');
       return;
     }
 
@@ -947,7 +948,7 @@ export function POSTerminal() {
                       </div>
                       <button
                         onClick={handleKCBSTKPayment}
-                        disabled={(kcbEnvironment !== 'sandbox' && !kcbConfigured) || !kcbPhone || kcbPhone.length < 9}
+                        disabled={(kcbEnvironment !== 'sandbox' && !kcbConfigured) || !validatePhoneNumber(kcbPhone).valid}
                         className="w-full py-3 bg-emerald-600 text-white rounded-lg font-bold hover:bg-emerald-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                       >
                         <Smartphone size={20} />
