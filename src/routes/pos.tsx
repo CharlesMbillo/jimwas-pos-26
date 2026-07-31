@@ -249,7 +249,8 @@ export function POSTerminal() {
 
   // Handle KCB BUNI STK Push
   const handleMpesaPayment = async () => {
-    if (!kcbConfigured) {
+    // In production, require full configuration; in sandbox, allow testing without credentials
+    if (kcbEnvironment !== 'sandbox' && !kcbConfigured) {
       setKCBStatus('failed');
       setKCBError(kcbEnabled
         ? 'KCB BUNI API credentials not configured. Go to Settings > Payments to add Client ID, Secret, and Pass Key.'
@@ -266,6 +267,31 @@ export function POSTerminal() {
     setKCBError(null);
     setKCBStartTime(new Date());
 
+    // Sandbox: skip API call and go directly to local completion
+    if (kcbEnvironment === 'sandbox') {
+      try {
+        setKCBStatus('waiting');
+        toast.show('Sandbox mode: simulating STK Push...');
+        
+        // Simulate a brief STK push delay
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        
+        const receiptNumber = `SIM${Date.now().toString(36).toUpperCase()}`;
+        setKCBCheckoutId(receiptNumber);
+        setKCBStatus('success');
+        setKCBReceiptNumber(receiptNumber);
+        toast.show('KCB sandbox payment successful!');
+        
+        // Auto-complete the sale
+        await completeMpesaSale(receiptNumber);
+      } catch (error) {
+        setKCBStatus('failed');
+        setKCBError(error instanceof Error ? error.message : 'Sandbox simulation failed');
+      }
+      return;
+    }
+
+    // Production: call real API
     try {
       const result = await initiateSTKPush(kcbPhone, cartTotal, {
         cashierId: user?.id,
@@ -857,7 +883,7 @@ export function POSTerminal() {
                   )}
                   {kcbStatus === 'idle' && (
                     <>
-                      {!kcbConfigured && (
+                      {!kcbConfigured && kcbEnvironment !== 'sandbox' && (
                         <div className="flex items-start gap-3 bg-amber-900/30 border border-amber-700 rounded-lg p-3">
                           <AlertCircle size={18} className="text-amber-400 flex-shrink-0 mt-0.5" />
                           <div>
@@ -897,7 +923,7 @@ export function POSTerminal() {
                       </div>
                       <button
                         onClick={handleMpesaPayment}
-                        disabled={!kcbConfigured || !kcbPhone || kcbPhone.length < 9}
+                        disabled={(kcbEnvironment !== 'sandbox' && !kcbConfigured) || !kcbPhone || kcbPhone.length < 9}
                         className="w-full py-3 bg-emerald-600 text-white rounded-lg font-bold hover:bg-emerald-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                       >
                         <Smartphone size={20} />
