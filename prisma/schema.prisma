@@ -8,20 +8,20 @@ datasource db {
 }
 
 model Payment {
-  id                   String   @id @default(uuid())
-  provider             String
+  id                    String   @id @default(uuid())
+  provider              String
   providerTransactionId String?  @map("provider_transaction_id")
-  merchantRequestId    String?  @map("merchant_request_id") @db.VarChar(128)
-  checkoutRequestId    String?  @map("checkout_request_id")
-  phoneNumber          String   @map("phone_number")
-  amount               Float
-  invoiceNumber        String   @map("invoice_number")
-  status               String
-  receiptNumber        String?  @map("receipt_number")
-  callbackPayload      Json?    @map("callback_payload")
-  idempotencyKey       String?  @map("idempotency_key") @db.VarChar(128)
-  createdAt            DateTime @default(now()) @map("created_at")
-  updatedAt            DateTime @updatedAt @map("updated_at")
+  merchantRequestId     String?  @map("merchant_request_id") @db.VarChar(128)
+  checkoutRequestId     String?  @map("checkout_request_id")
+  phoneNumber           String   @map("phone_number") @db.VarChar(32)
+  amount                Decimal  @db.Numeric
+  invoiceNumber         String   @map("invoice_number") @db.VarChar(128)
+  status                String
+  receiptNumber         String?  @map("receipt_number") @db.VarChar(64)
+  callbackPayload       Json?    @map("callback_payload")
+  idempotencyKey        String?  @map("idempotency_key") @db.VarChar(128)
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
 
   @@index([merchantRequestId], name: "idx_payments_merchant_request_id")
   @@index([invoiceNumber], name: "idx_payments_invoice_number")
