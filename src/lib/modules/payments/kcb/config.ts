@@ -45,10 +45,10 @@ class ConfigManager {
    * Get a single environment variable with optional default
    */
   private getEnv(key: string, defaultValue?: string): string {
-    const value = import.meta.env[`VITE_${key}`] || process.env[key];
+    const value = import.meta.env[`VITE_${key}`];
 
     if (!value && !defaultValue) {
-      throw new Error(`Missing required environment variable: ${key}`);
+      throw new Error(`Missing required environment variable: VITE_${key}`);
     }
 
     return value || defaultValue || '';
