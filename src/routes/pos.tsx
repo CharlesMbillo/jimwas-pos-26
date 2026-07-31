@@ -268,23 +268,13 @@ export function POSTerminal() {
     setKCBError(null);
     setKCBStartTime(new Date());
 
-    // Sandbox: skip API call and go directly to local completion
+    // Sandbox: wait for user to confirm payment
     if (kcbEnvironment === 'sandbox') {
       try {
-        setKCBStatus('waiting');
-        toast.show('Sandbox mode: simulating STK Push...');
-        
-        // Simulate a brief STK push delay
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        
         const receiptNumber = (await import('../lib/mpesa')).generateMpesaReceiptNumber();
         setKCBCheckoutId(receiptNumber);
-        setKCBStatus('success');
-        setKCBReceiptNumber(receiptNumber);
-        toast.show('KCB sandbox payment successful!');
-        
-        // Auto-complete the sale
-        await completeKCBSTKSale(receiptNumber);
+        setKCBStatus('waiting');
+        toast.show('Sandbox STK Push sent. Check your phone or click "Confirm Payment" to complete.');
       } catch (error) {
         setKCBStatus('failed');
         setKCBError(error instanceof Error ? error.message : 'Sandbox simulation failed');
@@ -327,7 +317,7 @@ export function POSTerminal() {
         setKCBReceiptNumber(statusResult.kcbReceiptNumber || null);
         toast.show('KCB payment successful!');
         // Auto-complete the sale
-        await completeMpesaSale(statusResult.kcbReceiptNumber);
+        await completeKCBSTKSale(statusResult.kcbReceiptNumber);
       } else if (statusResult.status === 'cancelled') {
         setKCBStatus('cancelled');
         setKCBError('Payment was cancelled by user');
@@ -357,7 +347,7 @@ export function POSTerminal() {
 
     try {
       const receiptNumber = (await import('../lib/mpesa')).generateMpesaReceiptNumber();
-      const result = await completeMpesaSale(receiptNumber);
+      const result = await completeKCBSTKSale(receiptNumber);
 
       if (result?.success === false) {
         throw new Error(result.error || 'Could not complete the simulated sale');
