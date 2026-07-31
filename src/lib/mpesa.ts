@@ -5,6 +5,21 @@ import type { KCBPaymentRecord } from './db';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
+/**
+ * Generate a realistic M-Pesa receipt number for testing/sandbox mode
+ * Format: 6-10 alphanumeric characters (e.g., "ABCDE12345", "JXK9U2")
+ * Matches KCB documentation sample receipt format
+ */
+export function generateMpesaReceiptNumber(): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let receipt = '';
+  const length = 6 + Math.floor(Math.random() * 5); // 6-10 characters
+  for (let i = 0; i < length; i++) {
+    receipt += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return receipt;
+}
+
 export interface STKPushResponse {
   success: boolean;
   checkoutRequestId?: string;

@@ -12,7 +12,7 @@ import { SettingsPage } from './routes/settings';
 import { AuditPage } from './routes/audit';
 import { LedgerPage } from './routes/ledger';
 import { BackupPage } from './routes/backup';
-import { MpesaPaymentsPage } from './routes/mpesa-payments';
+import { KCBPaymentsPage } from './routes/mpesa-payments';
 import { PopulateDBPage } from './routes/populate-db';
 import { VoidRequestsPage } from './routes/void-requests';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -81,8 +81,8 @@ function AppContent() {
         return <LedgerPage />;
       case 'backup':
         return <BackupPage />;
-      case 'mpesa-payments':
-        return <MpesaPaymentsPage />;
+      case 'kcb-payments':
+        return <KCBPaymentsPage />;
       case 'populate-db':
         return <PopulateDBPage />;
       case 'void-requests':

@@ -30,7 +30,7 @@ const STATUS_ICONS: Record<KCBPaymentRecord['status'], React.ReactNode> = {
   'insufficient_balance': <AlertCircle className="w-4 h-4" />,
 };
 
-export function MpesaPaymentsPage() {
+export function KCBPaymentsPage() {
   const { user } = useAuth();
   const [payments, setPayments] = useState<KCBPaymentRecord[]>([]);
   const [filteredPayments, setFilteredPayments] = useState<KCBPaymentRecord[]>([]);
@@ -56,7 +56,7 @@ export function MpesaPaymentsPage() {
       const sorted = data.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       setPayments(sorted);
     } catch (error) {
-      console.error('[v0] Failed to load M-Pesa payments:', error);
+      console.error('[v0] Failed to load KCB payments:', error);
     } finally {
       setIsLoading(false);
     }
@@ -121,7 +121,7 @@ export function MpesaPaymentsPage() {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `mpesa-payments-${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `kcb-payments-${new Date().toISOString().split('T')[0]}.csv`;
     document.body.appendChild(a);
     a.click();
     window.URL.revokeObjectURL(url);
@@ -145,12 +145,12 @@ export function MpesaPaymentsPage() {
           {/* Header */}
           <div className="mb-8">
             <div className="flex items-center gap-3 mb-2">
-              <div className="p-3 rounded-lg bg-green-500/20">
-                <Smartphone className="w-6 h-6 text-green-400" />
+              <div className="p-3 rounded-lg bg-emerald-500/20">
+                <Smartphone className="w-6 h-6 text-emerald-400" />
               </div>
               <div>
-                <h1 className="text-3xl font-bold text-white">M-Pesa Payment History</h1>
-                <p className="text-slate-400">Track and manage all M-Pesa transactions</p>
+                <h1 className="text-3xl font-bold text-white">KCB BUNI Payment History</h1>
+                <p className="text-slate-400">Track and manage all KCB M-Pesa STK Push IPN transactions (sandbox & production)</p>
               </div>
             </div>
           </div>
@@ -249,7 +249,7 @@ export function MpesaPaymentsPage() {
             ) : filteredPayments.length === 0 ? (
               <div className="bg-slate-800 rounded-xl border border-slate-700 p-8 text-center">
                 <Smartphone className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-                <p className="text-slate-400">No M-Pesa payments found</p>
+                <p className="text-slate-400">No KCB payments found</p>
               </div>
             ) : (
               filteredPayments.map((payment) => (

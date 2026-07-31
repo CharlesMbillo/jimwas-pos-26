@@ -276,7 +276,7 @@ export function POSTerminal() {
         // Simulate a brief STK push delay
         await new Promise(resolve => setTimeout(resolve, 1500));
         
-        const receiptNumber = `SIM${Date.now().toString(36).toUpperCase()}`;
+        const receiptNumber = (await import('../lib/mpesa')).generateMpesaReceiptNumber();
         setKCBCheckoutId(receiptNumber);
         setKCBStatus('success');
         setKCBReceiptNumber(receiptNumber);
@@ -355,7 +355,7 @@ export function POSTerminal() {
     setKCBError(null);
 
     try {
-      const receiptNumber = `SIM${Date.now().toString(36).toUpperCase()}`;
+      const receiptNumber = (await import('../lib/mpesa')).generateMpesaReceiptNumber();
       const result = await completeMpesaSale(receiptNumber);
 
       if (result?.success === false) {

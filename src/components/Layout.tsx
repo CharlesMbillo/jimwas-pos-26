@@ -43,7 +43,7 @@ export function Layout({ children, currentPage, onNavigate, user }: LayoutProps)
 
   // Admin/Manager navigation items (in "More" dropdown)
   const adminNavItems = user && (user.role_code === 'admin' || user.role_code === 'manager' || user.role_code === 'cashier') ? [
-    { id: 'mpesa-payments', label: 'M-Pesa Payments', icon: Smartphone },
+    { id: 'kcb-payments', label: 'KCB BUNI Payments', icon: Smartphone },
     { id: 'security', label: 'Security', icon: Shield },
     { id: 'audit', label: 'Audit Trail', icon: FileText },
     { id: 'ledger', label: 'Ledger', icon: DollarSign },
