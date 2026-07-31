@@ -642,7 +642,7 @@ export function LedgerPage() {
                   className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:border-emerald-500"
                 >
                   <option value="cash">Cash</option>
-                  <option value="mpesa">M-Pesa</option>
+                  <option value="kcb">KCB BUNI STK</option>
                   <option value="card">Card</option>
                   <option value="bank_transfer">Bank Transfer</option>
                 </select>

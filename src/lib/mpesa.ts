@@ -1,4 +1,4 @@
-// M-Pesa STK Push Integration
+// KCB BUNI STK Push Integration
 import { generateId } from './db';
 import type { KCBPaymentRecord } from './db';
 
@@ -44,8 +44,8 @@ export interface STKPushStatusResponse {
   error?: string;
 }
 
-// Initiate STK Push
-export async function initiateSTKPush(
+// Initiate KCB BUNI STK Push
+export async function initiateKCBSTKPush(
   phone: string,
   amount: number,
   options?: {
@@ -80,7 +80,7 @@ export async function initiateSTKPush(
       }
       data = JSON.parse(text);
     } catch (parseError) {
-      console.error('[v0] JSON parse error in initiateSTKPush:', parseError);
+      console.error('[v0] JSON parse error in initiateKCBSTKPush:', parseError);
       return { success: false, error: 'Invalid response from KCB service' };
     }
 
@@ -116,12 +116,12 @@ export async function checkSTKPushStatus(checkoutRequestId: string): Promise<STK
     try {
       const text = await response.text();
       if (!text) {
-        return { success: false, status: 'failed', error: 'Empty response from M-Pesa service' };
+        return { success: false, status: 'failed', error: 'Empty response from KCB BUNI service' };
       }
       data = JSON.parse(text);
     } catch (parseError) {
       console.error('[v0] JSON parse error in checkSTKPushStatus:', parseError);
-      return { success: false, status: 'failed', error: 'Invalid response from M-Pesa service' };
+      return { success: false, status: 'failed', error: 'Invalid response from KCB BUNI service' };
     }
 
     if (!response.ok) {
@@ -139,8 +139,8 @@ export async function checkSTKPushStatus(checkoutRequestId: string): Promise<STK
   }
 }
 
-// Poll for payment completion
-export async function pollForPaymentCompletion(
+// Poll for KCB BUNI payment completion
+export async function pollForKCBPaymentCompletion(
   checkoutRequestId: string,
   options?: {
     maxAttempts?: number;
@@ -188,7 +188,7 @@ export function formatPhoneDisplay(phone: string): string {
   return phone;
 }
 
-// Create and track M-Pesa payment record
+// Create and track KCB BUNI payment record
 export async function createKCBPaymentRecord(
   phone: string,
   amount: number,

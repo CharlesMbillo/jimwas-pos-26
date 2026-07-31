@@ -1,11 +1,11 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Plus, Minus, Trash2, Search, User, ShoppingCart, Banknote, CreditCard, Smartphone, X, Package, Archive, ArchiveRestore, Loader2, CheckCircle2, XCircle, AlertCircle, Clock, FlaskConical, Zap } from 'lucide-react';
+import { Plus, Minus, Trash2, Search, User, ShoppingCart, Banknote, CreditCard, Smartphone, X, Package, Archive, ArchiveRestore, Loader2, CheckCircle2, XCircle, AlertCircle, Clock, FlaskConical, Zap, Printer } from 'lucide-react';
 import { generateId, saveProduct, getAllProducts, getAllCustomers, saveCustomer, getKCBSettings, getBusinessSettings, getReceiptSettings, getTransaction } from '../lib/db';
 import { syncInsertCustomer, syncInsertProduct, getSupabase } from '../lib/sync';
 import { logSaleCompleted, logCustomerCreated } from '../lib/audit';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/Toast';
-import { initiateSTKPush, pollForPaymentCompletion } from '../lib/mpesa';
+import { initiateKCBSTKPush, pollForKCBPaymentCompletion } from '../lib/mpesa';
 import { completeSale, validatePhoneNumber, validatePrice, validateStock, sanitizeInput } from '../lib/transaction-utils';
 import { printReceipt } from '../lib/print';
 import { useDebounce } from '../hooks/useDebounce';
@@ -33,7 +33,7 @@ export function POSTerminal() {
   const [parkedSales, setParkedSales] = useState<Array<{id: string; cart: CartItem[]; customer: Customer | null; timestamp: string}>>([]);
   const [showParkedSales, setShowParkedSales] = useState(false);
 
-  // M-Pesa STK Push state
+  // KCB BUNI STK Push state
   const [kcbPhone, setKCBPhone] = useState('');
   const [kcbStatus, setKCBStatus] = useState<'idle' | 'initiating' | 'waiting' | 'checking' | 'success' | 'failed' | 'cancelled'>('idle');
   const [kcbCheckoutId, setKCBCheckoutId] = useState<string | null>(null);
@@ -68,7 +68,7 @@ export function POSTerminal() {
     return () => clearTimeout(timer);
   }, [cart, selectedCustomer, saleType, depositAmount]);
 
-  // Timer for M-Pesa in-progress states only — do NOT reset on failure/success so the final time remains visible
+  // Timer for KCB BUNI STK in-progress states only — do NOT reset on failure/success so the final time remains visible
   useEffect(() => {
     if (kcbStatus !== 'waiting' && kcbStatus !== 'initiating' && kcbStatus !== 'checking') {
       return;
@@ -93,24 +93,24 @@ export function POSTerminal() {
     setCustomers(custs);
 
     // Always try Supabase first for KCB settings (authoritative source)
-    let mpesa = idbMpesa;
+    let kcbSettings = idbMpesa;
     const supabase = getSupabase();
     if (supabase) {
       const { data } = await supabase
         .from('kcb_settings')
         .select('*')
-        .eq('id', 'mpesa-settings')
+        .eq('id', 'kcb-buni-settings')
         .maybeSingle();
-      if (data) mpesa = data;
+      if (data) kcbSettings = data;
     }
 
-    setKCBEnabled(mpesa?.is_enabled ?? false);
-    setKCBEnvironment(mpesa?.environment ?? 'sandbox');
-    // M-Pesa is "configured" when enabled + has client ID + secret (minimum to attempt)
+    setKCBEnabled(kcbSettings?.is_enabled ?? false);
+    setKCBEnvironment(kcbSettings?.environment ?? 'sandbox');
+    // KCB BUNI STK is "configured" when enabled + has client ID + secret (minimum to attempt)
     // org_passkey and org_shortcode are validated at the edge function level with clear errors
-    const hasCredentials = !!(mpesa?.is_enabled &&
-      mpesa.client_id &&
-      mpesa.client_secret);
+    const hasCredentials = !!(kcbSettings?.is_enabled &&
+      kcbSettings.client_id &&
+      kcbSettings.client_secret);
     setKCBConfigured(hasCredentials);
   };
 
@@ -235,7 +235,7 @@ export function POSTerminal() {
     setSelectedCustomer(null);
     setAmountPaid('');
     setShowCheckout(false);
-    // Reset M-Pesa state
+    // Reset KCB BUNI STK state
     setKCBPhone('');
     setKCBStatus('idle');
     setKCBCheckoutId(null);
@@ -249,7 +249,7 @@ export function POSTerminal() {
   };
 
   // Handle KCB BUNI STK Push
-  const handleMpesaPayment = async () => {
+  const handleKCBSTKPayment = async () => {
     // In production, require full configuration; in sandbox, allow testing without credentials
     if (kcbEnvironment !== 'sandbox' && !kcbConfigured) {
       setKCBStatus('failed');
@@ -284,7 +284,7 @@ export function POSTerminal() {
         toast.show('KCB sandbox payment successful!');
         
         // Auto-complete the sale
-        await completeMpesaSale(receiptNumber);
+        await completeKCBSTKSale(receiptNumber);
       } catch (error) {
         setKCBStatus('failed');
         setKCBError(error instanceof Error ? error.message : 'Sandbox simulation failed');
@@ -294,25 +294,25 @@ export function POSTerminal() {
 
     // Production: call real API
     try {
-      const result = await initiateSTKPush(kcbPhone, cartTotal, {
+      const result = await initiateKCBSTKPush(kcbPhone, cartTotal, {
         cashierId: user?.id,
         cashierName: user?.name,
         accountReference: `POS-${Date.now()}`,
-        transactionDesc: 'KCB BUNI POS Payment',
+        transactionDesc: 'KCB BUNI STK Push Payment',
       });
 
       if (!result.success || !result.checkoutRequestId) {
         setKCBStatus('failed');
-        setKCBError(result.error || 'Failed to initiate KCB payment');
+        setKCBError(result.error || 'Failed to initiate KCB BUNI STK payment');
         return;
       }
 
       setKCBCheckoutId(result.checkoutRequestId);
       setKCBStatus('waiting');
-      toast.show('KCB payment request sent. Check your phone for STK Push prompt.');
+      toast.show('KCB BUNI STK Push request sent. Check your phone for the prompt.');
 
       // Start polling for completion
-      const statusResult = await pollForPaymentCompletion(result.checkoutRequestId, {
+      const statusResult = await pollForKCBPaymentCompletion(result.checkoutRequestId, {
         maxAttempts: 36, // 3 minutes
         intervalMs: 5000,
         onStatusChange: (status) => {
@@ -336,7 +336,7 @@ export function POSTerminal() {
         setKCBError('KCB payment timed out. Please try again.');
       } else if (statusResult.status === 'insufficient_balance') {
         setKCBStatus('failed');
-        setKCBError('Insufficient M-Pesa balance on account');
+        setKCBError('Insufficient balance on M-Pesa account');
       } else {
         setKCBStatus('failed');
         setKCBError(statusResult.resultDesc || 'KCB payment failed');
@@ -374,8 +374,8 @@ export function POSTerminal() {
     }
   };
 
-  // Complete sale after M-Pesa payment
-  const completeMpesaSale = useCallback(async (mpesaReceipt?: string) => {
+  // Complete sale after KCB BUNI STK payment
+  const completeKCBSTKSale = useCallback(async (mpesaReceipt?: string) => {
     const result = await completeSale({
       cart,
       cartTotal,
@@ -1086,6 +1086,45 @@ export function POSTerminal() {
                         <Loader2 size={20} className="animate-spin" />
                         <span>Completing sale...</span>
                       </div>
+
+                      {/* Reprint button */}
+                      <button
+                        onClick={async () => {
+                          try {
+                            const transaction = await getTransaction((await import('../lib/db')).saveTransaction);
+                            if (transaction) {
+                              const [business, receipt] = await Promise.all([
+                                getBusinessSettings(),
+                                getReceiptSettings(),
+                              ]);
+                              if (business && receipt) {
+                                printReceipt({
+                                  business,
+                                  receipt,
+                                  transaction: {
+                                    id: transaction.id,
+                                    items: transaction.items,
+                                    total_amount: transaction.total_amount,
+                                    amount_paid: transaction.amount_paid,
+                                    change_amount: transaction.change_amount,
+                                    payment_method: transaction.payment_method,
+                                    created_at: transaction.created_at,
+                                    customer_name: transaction.customer_name,
+                                    customer_phone: transaction.customer_phone,
+                                    cashier_name: user?.name,
+                                  },
+                                });
+                              }
+                            }
+                          } catch (error) {
+                            console.error('[v0] Error reprinting:', error);
+                          }
+                        }}
+                        className="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition flex items-center justify-center gap-2 text-sm"
+                      >
+                        <Printer size={16} />
+                        Reprint Receipt
+                      </button>
                     </div>
                   )}
 

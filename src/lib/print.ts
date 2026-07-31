@@ -84,7 +84,7 @@ function buildReceiptHtml(options: PrintOptions): string {
   lines.push(formatLine('Method:', transaction.payment_method.toUpperCase()));
 
   if (transaction.mpesa_receipt) {
-    lines.push(formatLine('M-Pesa Ref:', transaction.mpesa_receipt));
+    lines.push(formatLine('KCB BUNI STK Ref:', transaction.mpesa_receipt));
   }
 
   lines.push(divider);
