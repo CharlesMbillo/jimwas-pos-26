@@ -16,6 +16,11 @@ export default defineConfig({
       '.vusercontent.net',
     ],
     middlewareMode: false,
+    hmr: {
+      protocol: 'wss',
+      host: 'vm-kcb-buni-integration.vusercontent.net',
+      port: 443,
+    },
   },
   preview: {
     allowedHosts: [
