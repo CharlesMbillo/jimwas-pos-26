@@ -115,7 +115,7 @@ export function TransactionsPage() {
     const stats = {
       totalTransactions: transactions.length,
       totalAmount: transactions.reduce((sum, t) => sum + t.amount, 0),
-      successCount: transactions.filter(t => t.status === 'success').length,
+      successCount: transactions.filter(t => t.status === 'completed' || t.status === 'success').length,
       failedCount: transactions.filter(t => t.status === 'failed').length,
       averageValue: transactions.length > 0 
         ? transactions.reduce((sum, t) => sum + t.amount, 0) / transactions.length 
@@ -175,10 +175,7 @@ export function TransactionsPage() {
       await loadTransactions();
       // Check if user can void transactions based on role
       const userRole = user?.role_code;
-      console.log('[v0] DEBUG - User object:', user);
-      console.log('[v0] DEBUG - User role_code:', userRole);
       const allowed = userRole === 'admin' || userRole === 'manager';
-      console.log('[v0] DEBUG - canVoid allowed:', allowed);
       setCanVoid(allowed);
     };
     initPage().finally(() => setIsLoading(false));
@@ -251,7 +248,7 @@ export function TransactionsPage() {
   };
 
   const handleVoidClick = async (transaction: UnifiedTransaction) => {
-    if (!canVoid || transaction.status !== 'success' || transaction.type !== 'sale') return;
+    if (!canVoid || (transaction.status !== 'completed' && transaction.status !== 'success') || transaction.type !== 'sale') return;
     
     try {
       // Fetch the full transaction details
@@ -492,13 +489,6 @@ export function TransactionsPage() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex justify-center gap-2">
-                          {(() => {
-                            console.log('[v0] DEBUG - Transaction:', { type: txn.type, status: txn.status, canVoid });
-                            if (txn.type === 'sale' && txn.status === 'success') {
-                              console.log('[v0] DEBUG - Sale success row found, canVoid:', canVoid, 'Should show trash icon');
-                            }
-                            return null;
-                          })()}
                           {txn.type === 'sale' && (
                             <button
                               onClick={() => handlePrintReceipt(txn)}
@@ -509,7 +499,7 @@ export function TransactionsPage() {
                               <Printer className="w-4 h-4" />
                             </button>
                           )}
-                          {canVoid && txn.type === 'sale' && txn.status === 'success' && (
+                          {canVoid && txn.type === 'sale' && (txn.status === 'completed' || txn.status === 'success') && (
                             <button
                               onClick={() => handleVoidClick(txn)}
                               className="p-1 hover:bg-red-900/30 rounded-lg transition text-red-400 hover:text-red-300"
