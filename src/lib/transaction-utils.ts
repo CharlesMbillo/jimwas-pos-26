@@ -140,12 +140,13 @@ export function validatePhoneNumber(phone: string): { valid: boolean; error?: st
   const cleaned = phone.replace(/\D/g, '');
   
   // Valid Kenyan mobile prefixes (9 digits after country code 254)
+  // Format: 0 + [2-digit prefix] + [7-digit subscriber number] = 10 total digits
   // Safaricom: 100-108 (older), 110-119, 700-729, 740-743, 745-746, 748, 757-759, 768-769, 790-799
   // Airtel: 100-108, 730-739, 750-756, 762, 767, 780-789
   // Other carriers: 010-019, 050-059, 070-079, 080-089
   // Including all 01X and 05X prefixes for other carriers
-  const validPrefixPattern = /^0(?:1[0-9]|5[0-9]|7[0-9]{2}|8[0-9]{2})\d{6}$/;
-  const validIntlPrefixPattern = /^254(?:1[0-9]|5[0-9]|7[0-9]{2}|8[0-9]{2})\d{6}$/;
+  const validPrefixPattern = /^0(?:1[0-9]|5[0-9]|7[0-9]{2}|8[0-9]{2})\d{7}$/;
+  const validIntlPrefixPattern = /^254(?:1[0-9]|5[0-9]|7[0-9]{2}|8[0-9]{2})\d{7}$/;
   
   // Local format: 0XXXXXXXXX (10 digits)
   if (cleaned.length === 10) {
