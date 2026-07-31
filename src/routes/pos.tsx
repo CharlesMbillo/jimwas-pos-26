@@ -1,12 +1,13 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Plus, Minus, Trash2, Search, User, ShoppingCart, Banknote, CreditCard, Smartphone, X, Package, Archive, ArchiveRestore, Loader2, CheckCircle2, XCircle, AlertCircle, Clock, FlaskConical, Zap } from 'lucide-react';
-import { generateId, saveProduct, getAllProducts, getAllCustomers, saveCustomer, getKCBSettings } from '../lib/db';
+import { generateId, saveProduct, getAllProducts, getAllCustomers, saveCustomer, getKCBSettings, getBusinessSettings, getReceiptSettings, getTransaction } from '../lib/db';
 import { syncInsertCustomer, syncInsertProduct, getSupabase } from '../lib/sync';
 import { logSaleCompleted, logCustomerCreated } from '../lib/audit';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/Toast';
 import { initiateSTKPush, pollForPaymentCompletion } from '../lib/mpesa';
 import { completeSale, validatePhoneNumber, validatePrice, validateStock, sanitizeInput } from '../lib/transaction-utils';
+import { printReceipt } from '../lib/print';
 import { useDebounce } from '../hooks/useDebounce';
 import { SaleTypeSelector } from '../components/SaleTypeSelector';
 import type { Product, Customer, CartItem } from '../lib/types';
@@ -549,6 +550,39 @@ export function POSTerminal() {
 
     if (result.success) {
       await logSaleCompleted(result.transactionId, { cart, total_amount: cartTotal }, user?.id);
+      
+      // Automatically print receipt after successful sale
+      try {
+        const transaction = await getTransaction(result.transactionId);
+        if (transaction) {
+          const [business, receipt] = await Promise.all([
+            getBusinessSettings(),
+            getReceiptSettings(),
+          ]);
+          
+          if (business && receipt && transaction) {
+            printReceipt({
+              business,
+              receipt,
+              transaction: {
+                id: transaction.id,
+                items: transaction.items,
+                total_amount: transaction.total_amount,
+                amount_paid: transaction.amount_paid,
+                change_amount: transaction.change_amount,
+                payment_method: transaction.payment_method,
+                created_at: transaction.created_at,
+                customer_name: selectedCustomer?.name,
+                customer_phone: selectedCustomer?.phone,
+                cashier_name: user?.name,
+              },
+            });
+          }
+        }
+      } catch (error) {
+        console.error('[v0] Error printing receipt:', error);
+      }
+      
       clearCart();
       loadData();
       toast.show('Transaction completed successfully!');
