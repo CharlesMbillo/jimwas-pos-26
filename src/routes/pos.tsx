@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/Toast';
 import { initiateKCBSTKPush, pollForKCBPaymentCompletion } from '../lib/mpesa';
 import { completeSale, validatePhoneNumber, validatePrice, validateStock, sanitizeInput } from '../lib/transaction-utils';
+import { formatPhoneNumber } from '../lib/kcb';
 import { printReceipt } from '../lib/print';
 import { useDebounce } from '../hooks/useDebounce';
 import { SaleTypeSelector } from '../components/SaleTypeSelector';
@@ -265,6 +266,9 @@ export function POSTerminal() {
       return;
     }
 
+    // Format phone number to 254XXXXXXXXX format per ICDN standards
+    const formattedPhone = formatPhoneNumber(kcbPhone);
+
     setKCBStatus('initiating');
     setKCBError(null);
     setKCBStartTime(new Date());
@@ -275,7 +279,7 @@ export function POSTerminal() {
         const receiptNumber = (await import('../lib/mpesa')).generateMpesaReceiptNumber();
         setKCBCheckoutId(receiptNumber);
         setKCBStatus('waiting');
-        toast.show('Sandbox STK Push sent. Check your phone or click "Confirm Payment" to complete.');
+        toast.show(`Sandbox STK Push sent to ${formattedPhone}. Check your phone or click "Confirm Payment" to complete.`);
       } catch (error) {
         setKCBStatus('failed');
         setKCBError(error instanceof Error ? error.message : 'Sandbox simulation failed');
@@ -285,7 +289,7 @@ export function POSTerminal() {
 
     // Production: call real API
     try {
-      const result = await initiateKCBSTKPush(kcbPhone, cartTotal, {
+      const result = await initiateKCBSTKPush(formattedPhone, cartTotal, {
         cashierId: user?.id,
         cashierName: user?.name,
         accountReference: `POS-${Date.now()}`,
@@ -935,11 +939,11 @@ export function POSTerminal() {
                             </button>
                           )}
                         </div>
-                        <input
-                          type="tel"
-                          value={kcbPhone}
-                          onChange={(e) => setKCBPhone(e.target.value)}
-                          placeholder={kcbEnvironment === 'sandbox' ? '254700000000 (test)' : '07XX XXX XXX'}
+                  <input
+                        type="tel"
+                        value={kcbPhone}
+                        onChange={(e) => setKCBPhone(e.target.value)}
+                        placeholder={kcbEnvironment === 'sandbox' ? '0722123456 or 254722123456' : '07XX XXX XXX'}
                           className="w-full px-4 py-3 bg-slate-600 text-white rounded-lg border border-slate-500 focus:border-emerald-500 focus:outline-none text-lg"
                         />
                         {kcbEnvironment === 'sandbox' && (
