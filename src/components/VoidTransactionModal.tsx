@@ -60,9 +60,10 @@ export function VoidTransactionModal({ transaction, isOpen, onClose, onVoidCompl
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-slate-800 rounded-lg border border-red-500/50 max-w-md w-full mx-4 overflow-hidden">
-        {/* Header */}
-        <div className="bg-red-900/30 px-6 py-4 border-b border-red-500/30 flex items-center justify-between">
+      {/* Make the modal a column so header/footer can stay visible while body scrolls */}
+      <div className="bg-slate-800 rounded-lg border border-red-500/50 max-w-md w-full mx-4 max-h-[80vh] overflow-hidden flex flex-col">
+        {/* Header (non-scrolling) */}
+        <div className="bg-red-900/30 px-6 py-4 border-b border-red-500/30 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-3">
             <AlertTriangle className="w-5 h-5 text-red-400" />
             <h2 className="text-lg font-semibold text-red-400">Void Transaction</h2>
@@ -76,8 +77,8 @@ export function VoidTransactionModal({ transaction, isOpen, onClose, onVoidCompl
           </button>
         </div>
 
-        {/* Content */}
-        <div className="px-6 py-4 space-y-4">
+        {/* Content (scrolling area) */}
+        <div className="px-6 py-4 space-y-4 overflow-y-auto">
           {/* Transaction Details */}
           <div className="bg-slate-700/50 rounded-lg p-4 space-y-2 text-sm">
             <div className="flex justify-between">
@@ -111,7 +112,7 @@ export function VoidTransactionModal({ transaction, isOpen, onClose, onVoidCompl
           </div>
 
           {/* Reason Input */}
-          <div>
+          <div className="">
             <label className="block text-sm font-medium text-slate-300 mb-2">
               Reason for Void <span className="text-red-400">*</span>
             </label>
@@ -127,8 +128,8 @@ export function VoidTransactionModal({ transaction, isOpen, onClose, onVoidCompl
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="border-t border-slate-700 px-6 py-4 flex gap-3 justify-end bg-slate-700/30">
+        {/* Footer (non-scrolling) */}
+        <div className="border-t border-slate-700 px-6 py-4 flex gap-3 justify-end bg-slate-700/30 flex-shrink-0">
           <button
             onClick={onClose}
             className="px-4 py-2 rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-700 transition disabled:opacity-50"
