@@ -1,11 +1,13 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-const url = import.meta.env.NEXT_PUBLIC_SUPABASE_URL as string | undefined;
-const anonKey = import.meta.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string | undefined;
+const url = import.meta.env.VITE_SUPABASE_URL ?? import.meta.env.NEXT_PUBLIC_SUPABASE_URL;
+const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY ?? import.meta.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-if (!url || !anonKey) {
-  throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY in environment');
+let _supabase: SupabaseClient | null = null;
+
+if (url && anonKey) {
+  _supabase = createClient(url, anonKey);
 }
 
-export const supabase = createClient(url, anonKey);
+export const supabase = _supabase;
 export default supabase;

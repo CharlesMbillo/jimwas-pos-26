@@ -43,6 +43,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(currentUser);
       } catch (error) {
         console.error('Auth init error:', error);
+        // Ensure the app still renders even if IndexedDB/Supabase init fails
       } finally {
         setIsLoading(false);
       }
