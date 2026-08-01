@@ -3,8 +3,8 @@ import { PaymentRepository, PaymentStatus } from '../repositories/PaymentReposit
 import { PaymentRequest } from '../dto/PaymentRequest';
 
 /**
- * Thin service layer that uses PaymentRepository to encapsulate
- * higher-level flows: initiation + callback handling.
+ * Simplified payment service for STK Push only workflow.
+ * Handles payment initiation without callbacks.
  */
 export class PaymentService {
   private repo: PaymentRepository;
@@ -14,7 +14,7 @@ export class PaymentService {
   }
 
   async createInitiation(payload: PaymentRequest) {
-    // normalize inputs as PaymentRepository expects
+    // Create payment record from initiation request
     return this.repo.createFromInitiation({
       provider: payload.provider,
       merchantRequestId: payload.merchantRequestId,
@@ -29,18 +29,17 @@ export class PaymentService {
   }
 
   /**
-   * Handle a provider callback (webhook) that identifies the payment by merchantRequestId.
-   * updates: partial fields to write back (status, receiptNumber, callback payload, etc).
+   * Update payment status directly (for STK Push or manual updates).
    */
-  async handleCallback(merchantRequestId: string, updates: Partial<Record<string, any>>) {
-    // defensive: ensure merchantRequestId present
+  async updatePaymentStatus(
+    merchantRequestId: string,
+    status: PaymentStatus,
+    updates?: Partial<Record<string, any>>
+  ) {
     if (!merchantRequestId) return null;
-
-    // updateFromCallback already searches and returns null if none exists
     return this.repo.updateFromCallback(merchantRequestId, {
+      status,
       ...updates,
-      // keep callback payload under callbackPayload if provided raw
-      callbackPayload: updates.callbackPayload ?? updates.raw ?? null,
     });
   }
 }

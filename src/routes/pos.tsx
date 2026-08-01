@@ -7,13 +7,21 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/Toast';
 import { initiateKCBSTKPush, pollForKCBPaymentCompletion } from '../lib/mpesa';
 import { completeSale, validatePhoneNumber, validatePrice, validateStock, sanitizeInput } from '../lib/transaction-utils';
-import { formatPhoneNumber } from '../lib/kcb';
 import { printReceipt } from '../lib/print';
 import { useDebounce } from '../hooks/useDebounce';
 import { SaleTypeSelector } from '../components/SaleTypeSelector';
 import type { Product, Customer, CartItem } from '../lib/types';
 
 const LOYALTY_POINTS_PER_SHILLING = 100;
+
+// Format phone number to 254XXXXXXXXX format (KCB standard)
+function formatPhoneNumber(phone: string): string {
+  const cleaned = phone.replace(/\D/g, '');
+  if (cleaned.startsWith('254') && cleaned.length === 12) return cleaned;
+  if (cleaned.startsWith('0') && cleaned.length === 10) return `254${cleaned.slice(1)}`;
+  if (cleaned.length === 9) return `254${cleaned}`;
+  return cleaned;
+}
 
 export function POSTerminal() {
   const { user } = useAuth();
