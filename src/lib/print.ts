@@ -198,3 +198,47 @@ export function testPrint(business: BusinessSettings, receipt: ReceiptSettings):
     },
   });
 }
+
+// Preview receipt in a new window before printing
+export function previewReceipt(options: PrintOptions): void {
+  const html = buildReceiptHtml(options);
+  const newWindow = window.open('', 'receipt-preview', 'width=400,height=600,resizable=yes,scrollbars=yes');
+  if (newWindow) {
+    newWindow.document.write(html);
+    newWindow.document.close();
+  }
+}
+
+// Store receipt in local history for reprinting
+export function saveReceiptToHistory(transaction: PrintTransaction): void {
+  try {
+    const history = JSON.parse(localStorage.getItem('receipt_history') || '[]') as PrintTransaction[];
+    history.unshift(transaction);
+    // Keep last 100 receipts
+    if (history.length > 100) {
+      history.pop();
+    }
+    localStorage.setItem('receipt_history', JSON.stringify(history));
+  } catch (error) {
+    console.error('[v0] Error saving receipt to history:', error);
+  }
+}
+
+// Get receipt history for reprinting
+export function getReceiptHistory(): PrintTransaction[] {
+  try {
+    return JSON.parse(localStorage.getItem('receipt_history') || '[]') as PrintTransaction[];
+  } catch (error) {
+    console.error('[v0] Error reading receipt history:', error);
+    return [];
+  }
+}
+
+// Clear receipt history
+export function clearReceiptHistory(): void {
+  try {
+    localStorage.removeItem('receipt_history');
+  } catch (error) {
+    console.error('[v0] Error clearing receipt history:', error);
+  }
+}

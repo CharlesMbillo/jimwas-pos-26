@@ -7,7 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/Toast';
 import { initiateKCBSTKPush, pollForKCBPaymentCompletion } from '../lib/mpesa';
 import { completeSale, validatePhoneNumber, validatePrice, validateStock, sanitizeInput } from '../lib/transaction-utils';
-import { printReceipt } from '../lib/print';
+import { printReceipt, saveReceiptToHistory, getReceiptHistory, previewReceipt } from '../lib/print';
 import { useDebounce } from '../hooks/useDebounce';
 import { SaleTypeSelector } from '../components/SaleTypeSelector';
 import type { Product, Customer, CartItem } from '../lib/types';
@@ -58,6 +58,10 @@ export function POSTerminal() {
   // Sale type state
   const [saleType, setSaleType] = useState<'standard' | 'wholesale' | 'lipa_mdogo' | 'kyama'>('standard');
   const [depositAmount, setDepositAmount] = useState(0);
+
+  // Receipt printing state
+  const [lastTransactionId, setLastTransactionId] = useState<string | null>(null);
+  const [showReceiptHistory, setShowReceiptHistory] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -564,22 +568,30 @@ export function POSTerminal() {
           ]);
           
           if (business && receipt && transaction) {
+            const receiptData = {
+              id: transaction.id,
+              items: transaction.items,
+              total_amount: transaction.total_amount,
+              amount_paid: transaction.amount_paid,
+              change_amount: transaction.change_amount,
+              payment_method: transaction.payment_method,
+              created_at: transaction.created_at,
+              customer_name: selectedCustomer?.name,
+              customer_phone: selectedCustomer?.phone,
+              cashier_name: user?.name,
+              mpesa_receipt: kcbReceiptNumber || undefined,
+            };
+            
+            // Print receipt
             printReceipt({
               business,
               receipt,
-              transaction: {
-                id: transaction.id,
-                items: transaction.items,
-                total_amount: transaction.total_amount,
-                amount_paid: transaction.amount_paid,
-                change_amount: transaction.change_amount,
-                payment_method: transaction.payment_method,
-                created_at: transaction.created_at,
-                customer_name: selectedCustomer?.name,
-                customer_phone: selectedCustomer?.phone,
-                cashier_name: user?.name,
-              },
+              transaction: receiptData,
             });
+            
+            // Save to history for reprinting
+            saveReceiptToHistory(receiptData);
+            setLastTransactionId(result.transactionId);
           }
         }
       } catch (error) {
@@ -817,14 +829,21 @@ export function POSTerminal() {
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <button
               onClick={parkSale}
               disabled={cart.length === 0}
-              className="py-3 bg-amber-600 text-white rounded-lg font-medium hover:bg-amber-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="py-3 bg-amber-600 text-white rounded-lg font-medium hover:bg-amber-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm"
             >
               <Archive size={18} />
               Park Sale
+            </button>
+            <button
+              onClick={() => setShowReceiptHistory(true)}
+              className="py-3 bg-slate-600 text-white rounded-lg font-medium hover:bg-slate-500 transition flex items-center justify-center gap-2 text-sm"
+            >
+              <Printer size={18} />
+              History
             </button>
             <button
               onClick={() => setShowCheckout(true)}
@@ -1094,7 +1113,11 @@ export function POSTerminal() {
                       <button
                         onClick={async () => {
                           try {
-                            const transaction = await getTransaction((await import('../lib/db')).saveTransaction);
+                            if (!lastTransactionId) {
+                              toast.show('No transaction to reprint');
+                              return;
+                            }
+                            const transaction = await getTransaction(lastTransactionId);
                             if (transaction) {
                               const [business, receipt] = await Promise.all([
                                 getBusinessSettings(),
@@ -1112,15 +1135,18 @@ export function POSTerminal() {
                                     change_amount: transaction.change_amount,
                                     payment_method: transaction.payment_method,
                                     created_at: transaction.created_at,
-                                    customer_name: transaction.customer_name,
-                                    customer_phone: transaction.customer_phone,
+                                    customer_name: selectedCustomer?.name || transaction.customer_name,
+                                    customer_phone: selectedCustomer?.phone || transaction.customer_phone,
                                     cashier_name: user?.name,
+                                    mpesa_receipt: transaction.mpesa_receipt,
                                   },
                                 });
+                                toast.show('Receipt sent to printer');
                               }
                             }
                           } catch (error) {
                             console.error('[v0] Error reprinting:', error);
+                            toast.show('Error printing receipt');
                           }
                         }}
                         className="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition flex items-center justify-center gap-2 text-sm"
@@ -1441,6 +1467,80 @@ export function POSTerminal() {
                     </div>
                   );
                 })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Receipt History Modal */}
+      {showReceiptHistory && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-slate-800 rounded-xl w-full max-w-2xl p-6 max-h-96 flex flex-col">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold text-white">Receipt History</h3>
+              <button onClick={() => setShowReceiptHistory(false)} className="text-slate-400 hover:text-white">
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="space-y-3 overflow-y-auto flex-1">
+              {getReceiptHistory().length === 0 ? (
+                <div className="text-center py-8 text-slate-400">
+                  <Printer size={48} className="mx-auto mb-4 opacity-50" />
+                  <p>No receipt history</p>
+                </div>
+              ) : (
+                getReceiptHistory().map((receipt) => (
+                  <div key={receipt.id} className="bg-slate-700 rounded-lg p-4 hover:bg-slate-600 transition">
+                    <div className="flex justify-between items-start mb-3">
+                      <div>
+                        <p className="text-white font-medium">{receipt.id}</p>
+                        <p className="text-xs text-slate-400">
+                          {new Date(receipt.created_at).toLocaleString()}
+                        </p>
+                        {receipt.customer_name && (
+                          <p className="text-xs text-emerald-400 mt-1">
+                            Customer: {receipt.customer_name}
+                          </p>
+                        )}
+                        <p className="text-xs text-slate-300 mt-1">
+                          {receipt.items.length} item{receipt.items.length !== 1 ? 's' : ''} • {receipt.payment_method.toUpperCase()}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-lg font-bold text-emerald-400">
+                          KES {receipt.total_amount.toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        try {
+                          const [business, receiptSettings] = await Promise.all([
+                            getBusinessSettings(),
+                            getReceiptSettings(),
+                          ]);
+                          if (business && receiptSettings) {
+                            printReceipt({
+                              business,
+                              receipt: receiptSettings,
+                              transaction: receipt,
+                            });
+                            toast.show('Receipt sent to printer');
+                          }
+                        } catch (error) {
+                          console.error('[v0] Error reprinting from history:', error);
+                          toast.show('Error printing receipt');
+                        }
+                      }}
+                      className="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition flex items-center justify-center gap-2 text-sm"
+                    >
+                      <Printer size={16} />
+                      Reprint
+                    </button>
+                  </div>
+                ))
               )}
             </div>
           </div>
