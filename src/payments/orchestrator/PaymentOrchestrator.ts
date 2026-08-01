@@ -113,28 +113,5 @@ export class PaymentOrchestrator {
     }
   }
 
-  // Handle provider callbacks routed from Express/webhooks
-  async handleProviderCallback(providerName: string, payload: any) {
-    const provider = this.providers.get(providerName);
-    if (!provider) throw new Error(`Unknown provider: ${providerName}`);
-    const parsed = provider.parseCallback(payload);
-    if (!parsed.merchantRequestId && !parsed.providerTransactionId) {
-      throw new Error('Callback missing identifiers');
-    }
-    const updates: any = {
-      status: parsed.status ?? 'PENDING',
-      providerTransactionId: parsed.providerTransactionId,
-      callbackPayload: parsed.raw ?? payload,
-      merchantRequestId: parsed.merchantRequestId,
-      receiptNumber: parsed.receiptNumber,
-    };
-    // Update via repository; repo.updateFromCallback handles lookups
-    return this.repo.updateFromCallback(parsed.merchantRequestId ?? parsed.providerTransactionId ?? '', updates);
-  }
 
-  // Reconciliation helper - optional: call provider.statusLookup if available
-  async reconcile(paymentId: string, providerName?: string) {
-    // find local payment by id (use repo.findByInvoice or similar)
-    // if provider supports statusLookup, call it and apply
-  }
 }
