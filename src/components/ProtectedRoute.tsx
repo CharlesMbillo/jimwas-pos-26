@@ -33,6 +33,13 @@ export function ProtectedRoute({ routePath, children, fallback }: ProtectedRoute
         return;
       }
 
+      // Admin bypasses permission checks — full access to all allowed routes
+      if (user.role_code === 'admin') {
+        setHasAccess(true);
+        setIsChecking(false);
+        return;
+      }
+
       // Check permission-based access
       const routeConfig = getRouteConfig(routePath);
       if (routeConfig?.permissions && routeConfig.permissions.length > 0) {
