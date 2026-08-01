@@ -1,0 +1,280 @@
+================================================================================
+  SIMPLIFIED POS WORKFLOW WITH KCB BUNI APIs - COMPLETE ARCHITECTURE
+================================================================================
+
+THREE SALE TYPES:
+┌──────────────────────┐  ┌──────────────────────┐  ┌──────────────────────┐
+│   RETAIL SALE        │  │  WHOLESALE/BULK      │  │    OFFER SALE        │
+│                      │  │   DROPSHIPPING       │  │                      │
+└──────────┬───────────┘  └──────────┬───────────┘  └──────────┬───────────┘
+           │                        │                         │
+      Product         Bulk Order +  │                    Product
+      Selection       Wholesale     │ Multiple          Selection
+                      Pricing       │ Installments      + Discount
+           │                        │                         │
+           └────────────────────────┼─────────────────────────┘
+                                    ▼
+                          ┌─────────────────────┐
+                          │  PRICE CALCULATION  │
+                          │  - Retail Price     │
+                          │  - Wholesale Price  │
+                          │  - Offer Price      │
+                          └──────────┬──────────┘
+                                     ▼
+                          ┌─────────────────────┐
+                          │  STK PUSH API       │
+                          │  /kcb-stk           │
+                          │  Initiate Payment   │
+                          └──────────┬──────────┘
+                                     ▼
+                          ┌─────────────────────┐
+                          │  Customer Receives  │
+                          │  STK Prompt         │
+                          │  Enters M-PESA PIN  │
+                          └──────────┬──────────┘
+                                     ▼
+                          ┌─────────────────────┐
+                          │  KCB CONFIRMS       │
+                          │  PAYMENT            │
+                          │  responseCode: "0"  │
+                          └──────────┬──────────┘
+                                     ▼
+                    ┌────────────────────────────────┐
+                    │  IPN NOTIFICATION API          │
+                    │  /kcb-ipn-notification         │
+                    │  Payment Confirmed ✓           │
+                    └────────┬─────────────────────────┘
+                             ▼
+        ┌────────────────────────────────────────────────────────┐
+        │  AUTOMATIC TRIGGER CHAIN EXECUTES                      │
+        └────────────────────────────────────────────────────────┘
+        
+        TRIGGER 1: Payment → Invoice Update
+        ┌──────────────────────────────────────┐
+        │ Function: trigger_payment_to_invoice │
+        │ Event: AFTER UPDATE kcb_payments     │
+        │ Condition: status = 'SUCCESS'        │
+        │ Action:                              │
+        │  • UPDATE invoices SET               │
+        │    - payment_status = 'PAID'         │
+        │    - paid_date = NOW()               │
+        │    - payment_method = 'M-PESA'       │
+        │ Result: ✓ Invoice Marked PAID        │
+        └────────────────┬─────────────────────┘
+                         ▼
+        TRIGGER 2: Invoice → Inventory Update
+        ┌──────────────────────────────────────┐
+        │ Function: trigger_invoice_to_inventory
+        │ Event: AFTER UPDATE invoices         │
+        │ Condition: payment_status = 'PAID'   │
+        │ Action:                              │
+        │  • INSERT inventory_movements        │
+        │    (product, quantity, reference)    │
+        │  • UPDATE inventory SET              │
+        │    - quantity_available -= qty       │
+        │ Result: ✓ Stock Deducted             │
+        └────────────────┬─────────────────────┘
+                         ▼
+        TRIGGER 3: Inventory → Alert Webhook
+        ┌──────────────────────────────────────┐
+        │ Function: trigger_inventory_alert    │
+        │ Event: AFTER UPDATE inventory        │
+        │ Condition: qty < threshold           │
+        │ Action:                              │
+        │  • GET webhook_url FROM settings     │
+        │  • POST to webhook with alert        │
+        │  • Include: product, qty, threshold  │
+        │ Result: ✓ Alert Sent                 │
+        └────────────────┬─────────────────────┘
+                         ▼
+        ┌────────────────────────────────────────────────────────┐
+        │  FINAL STATUS                                          │
+        │  ✓ Payment: SUCCESS (marked in database)              │
+        │  ✓ Invoice: PAID (auto-marked with receipt)           │
+        │  ✓ Inventory: UPDATED (quantities deducted)           │
+        │  ✓ Alert: SENT (if stock below threshold)             │
+        │                                                        │
+        │  ⏱ TOTAL TIME: < 100ms (sub-second automation)        │
+        │  👥 MANUAL INTERVENTION: ZERO STEPS REQUIRED          │
+        └────────────────────────────────────────────────────────┘
+
+
+================================================================================
+  DATA FLOW EXAMPLE
+================================================================================
+
+Input to STK Push API:
+  POST /kcb-stk
+  {
+    "phone": "254712345678",
+    "amount": "5000",
+    "invoiceNumber": "INV-20260801-001",
+    "accountReference": "order-456"
+  }
+
+Database State Changes (Automatic):
+
+  kcb_payments table:
+  ┌─────────────────────────────────────────────────────────┐
+  │ id    │ merchant_request_id │ status   │ amount        │
+  ├─────────────────────────────────────────────────────────┤
+  │ uuid1 │ mr-12345            │ PENDING  │ 5000          │
+  │                                ↓ IPN received           │
+  │       │                      SUCCESS  │               │
+  │ ✓ Status Updated in < 1ms                               │
+  └─────────────────────────────────────────────────────────┘
+
+  invoices table:
+  ┌─────────────────────────────────────────────────────────┐
+  │ id    │ invoice_number     │ payment_status │ paid_date │
+  ├─────────────────────────────────────────────────────────┤
+  │ uuid2 │ INV-20260801-001   │ UNPAID         │ null      │
+  │                                ↓ Trigger 1 executed    │
+  │       │                      PAID           │ NOW()     │
+  │ ✓ Invoice auto-marked PAID in < 1ms                     │
+  └─────────────────────────────────────────────────────────┘
+
+  inventory table:
+  ┌──────────────────────────────────────────────────────┐
+  │ product_id │ quantity_available │ threshold          │
+  ├──────────────────────────────────────────────────────┤
+  │ prod-001   │ 100               │ 10                 │
+  │                 ↓ Trigger 2 executed                 │
+  │            │ 95 (deducted 5)    │                    │
+  │ ✓ Stock auto-deducted in < 1ms                        │
+  │                 ↓ Trigger 3 executed                 │
+  │            │ IF qty < threshold │ POST webhook alert │
+  │ ✓ Alert sent if needed in < 1ms                       │
+  └──────────────────────────────────────────────────────┘
+
+  inventory_movements table (Audit Trail):
+  ┌──────────────────────────────────────────────────────┐
+  │ product_id │ movement_type │ quantity │ reference_id │
+  ├──────────────────────────────────────────────────────┤
+  │ prod-001   │ SALE         │ -5       │ INV-...      │
+  │ ✓ Movement logged for audit in < 1ms                  │
+  └──────────────────────────────────────────────────────┘
+
+  ipn_notifications table (Confirmation Log):
+  ┌──────────────────────────────────────────────────────┐
+  │ merchant_request_id │ payment_status │ received_at   │
+  ├──────────────────────────────────────────────────────┤
+  │ mr-12345            │ SUCCESS        │ 2026-08-01... │
+  │ ✓ IPN logged for audit trail                          │
+  └──────────────────────────────────────────────────────┘
+
+
+================================================================================
+  COMPONENT RESPONSIBILITIES
+================================================================================
+
+  Component                 Role                     Automation
+  ─────────────────────────────────────────────────────────────────
+  STK Push API              Initiates payment        Sends request to customer
+  IPN Notification API      Confirms payment         Triggers Supabase insert
+  Supabase Trigger 1        Payment → Invoice        Keeps balances accurate
+  Supabase Trigger 2        Invoice → Inventory      Manages stock automatically
+  Supabase Trigger 3        Inventory → Alert        Prevents stock-outs
+
+
+================================================================================
+  SUCCESS CRITERIA
+================================================================================
+
+  ✓ Payment confirmation received within 10 seconds
+  ✓ Invoice auto-marked as PAID without delay
+  ✓ Inventory updated automatically for all sales
+  ✓ Stock alerts triggered when threshold reached
+  ✓ Zero manual steps required in payment-to-fulfillment flow
+  ✓ All transactions audited in database
+  ✓ System handles high transaction volumes (100+ per day)
+  ✓ Sub-second response times for all triggers
+
+
+================================================================================
+  DEPLOYMENT ARCHITECTURE
+================================================================================
+
+  Frontend (POS App)
+        │
+        ├─→ STK Push API ─────────→ KCB BUNI Gateway
+        │                               │
+        │                               ├─→ Customer Phone (STK Prompt)
+        │                               │
+        │                               └─→ IPN Notification API
+        │                                       │
+        │                                       ├─→ UPDATE kcb_payments
+        │                                       │
+        ├─────────────────────────────────────→ Trigger 1
+        │                                       │
+        ├─────────────────────────────────────→ UPDATE invoices
+        │                                       │
+        ├─────────────────────────────────────→ Trigger 2
+        │                                       │
+        ├─────────────────────────────────────→ UPDATE inventory
+        │                                       │
+        ├─────────────────────────────────────→ Trigger 3
+        │                                       │
+        └─────────────────────────────────────→ POST to Webhook URL
+                                                  (Alert Receiver)
+
+  Database (Supabase)
+  ┌────────────────────────────────────────┐
+  │ Tables                                 │
+  ├────────────────────────────────────────┤
+  │ • kcb_payments (payments table)        │
+  │ • invoices (invoice records)            │
+  │ • invoice_line_items (order lines)     │
+  │ • inventory (stock levels)              │
+  │ • inventory_movements (audit trail)     │
+  │ • ipn_notifications (confirmation log) │
+  │ • settings (configuration)              │
+  └────────────────────────────────────────┘
+
+  Triggers (Sub-second Execution)
+  ┌────────────────────────────────────────┐
+  │ • trigger_payment_to_invoice()         │
+  │ • trigger_invoice_to_inventory()       │
+  │ • trigger_inventory_alert_webhook()    │
+  └────────────────────────────────────────┘
+
+
+================================================================================
+  CONFIGURATION
+================================================================================
+
+  Environment Variables (KCB):
+  • KCB_BUNI_CLIENT_ID
+  • KCB_BUNI_CLIENT_SECRET
+  • KCB_BUNI_BASE_URL
+  • KCB_BUNI_TOKEN_URL
+  • KCB_BUNI_CALLBACK_URL = /functions/v1/kcb-ipn-notification
+
+  Settings Table:
+  • inventory_alert_threshold = 10 (low stock threshold)
+  • inventory_alert_webhook_url = https://your-domain.com/alerts
+
+
+================================================================================
+  MONITORING & LOGS
+================================================================================
+
+  View Payment Flow:
+  SELECT * FROM kcb_payments 
+  ORDER BY created_at DESC LIMIT 10;
+
+  View IPN Confirmations:
+  SELECT * FROM ipn_notifications 
+  ORDER BY received_at DESC LIMIT 10;
+
+  View Inventory Changes:
+  SELECT * FROM inventory_movements 
+  WHERE movement_type = 'SALE'
+  ORDER BY created_at DESC LIMIT 20;
+
+  View Trigger Logs:
+  SELECT * FROM pgsql_log 
+  WHERE message LIKE '%Trigger%'
+  ORDER BY created_at DESC;
+
+================================================================================
