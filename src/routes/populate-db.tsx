@@ -12,16 +12,33 @@ export function PopulateDBPage() {
     setIsLoading(true);
     setStatus('idle');
     try {
-      const response = await fetch('/data/jimwas-backup-2026-07-14.json');
+      const response = await fetch('/data/jimwas-backup-sample.json');
       if (!response.ok) {
-        throw new Error(`Failed to load backup: ${response.statusText}`);
+        const errorMessage = response.status === 404
+          ? 'Sample backup file not found. Please upload a backup file using the "Upload Backup File" option.'
+          : `Failed to load backup: ${response.statusText}`;
+        throw new Error(errorMessage);
       }
+      
+      // Check if response is JSON before parsing
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Invalid response format. Expected JSON, but got ' + (contentType || 'unknown'));
+      }
+      
       const backup = (await response.json()) as BackupData;
+      
+      // Validate backup structure
+      if (!backup.data) {
+        throw new Error('Invalid backup format: missing data field');
+      }
+      
       const restoreResult = await restoreFromBackup(backup);
       setResult(restoreResult);
       setStatus(restoreResult.errors.length === 0 ? 'success' : 'error');
     } catch (error) {
-      setResult({ synced: 0, skipped: 0, errors: [String(error)] });
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      setResult({ synced: 0, skipped: 0, errors: [errorMessage] });
       setStatus('error');
     } finally {
       setIsLoading(false);
@@ -35,13 +52,36 @@ export function PopulateDBPage() {
     setIsLoading(true);
     setStatus('idle');
     try {
+      // Validate file type
+      if (!file.name.endsWith('.json')) {
+        throw new Error('Please upload a valid JSON file (with .json extension)');
+      }
+      
+      // Check file size (max 10MB)
+      if (file.size > 10 * 1024 * 1024) {
+        throw new Error('File is too large (max 10MB)');
+      }
+      
       const text = await file.text();
-      const backup = JSON.parse(text) as BackupData;
+      let backup: BackupData;
+      
+      try {
+        backup = JSON.parse(text) as BackupData;
+      } catch (parseError) {
+        throw new Error('Invalid JSON format. Please ensure the file is a valid JSON backup file.');
+      }
+      
+      // Validate backup structure
+      if (!backup.data) {
+        throw new Error('Invalid backup format: missing data field');
+      }
+      
       const restoreResult = await restoreFromBackup(backup);
       setResult(restoreResult);
       setStatus(restoreResult.errors.length === 0 ? 'success' : 'error');
     } catch (error) {
-      setResult({ synced: 0, skipped: 0, errors: [String(error)] });
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      setResult({ synced: 0, skipped: 0, errors: [errorMessage] });
       setStatus('error');
     } finally {
       setIsLoading(false);
@@ -68,10 +108,10 @@ export function PopulateDBPage() {
           >
             <div className="flex items-center gap-3 mb-4">
               <Database size={24} className="text-blue-400" />
-              <h2 className="text-lg font-semibold">Load Default Backup</h2>
+              <h2 className="text-lg font-semibold">Load Sample Data</h2>
             </div>
             <p className="text-slate-400 text-sm mb-4">
-              Restore from jimwas-backup-2026-07-14.json
+              Load demo products, customers, and transactions
             </p>
             <button
               onClick={handlePopulateFromJSON}

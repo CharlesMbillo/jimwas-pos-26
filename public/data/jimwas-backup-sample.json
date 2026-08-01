@@ -1,0 +1,175 @@
+{
+  "version": "1.0.0",
+  "exported_at": "2026-08-01T12:00:00Z",
+  "exported_by": "System",
+  "business_name": "Jimwas Enterprises",
+  "data": {
+    "products": [
+      {
+        "id": "prod-001",
+        "name": "Milk 500ml",
+        "sku": "MILK-500",
+        "price": 65,
+        "cost": 45,
+        "stock": 100,
+        "category": "Dairy",
+        "low_stock_alert": 20,
+        "is_active": true,
+        "created_at": "2026-07-01T00:00:00Z",
+        "updated_at": "2026-08-01T00:00:00Z",
+        "sync_status": "synced"
+      },
+      {
+        "id": "prod-002",
+        "name": "Bread",
+        "sku": "BREAD-001",
+        "price": 55,
+        "cost": 35,
+        "stock": 150,
+        "category": "Bakery",
+        "low_stock_alert": 30,
+        "is_active": true,
+        "created_at": "2026-07-01T00:00:00Z",
+        "updated_at": "2026-08-01T00:00:00Z",
+        "sync_status": "synced"
+      },
+      {
+        "id": "prod-003",
+        "name": "Sugar 1kg",
+        "sku": "SUGAR-1KG",
+        "price": 180,
+        "cost": 140,
+        "stock": 80,
+        "category": "Groceries",
+        "low_stock_alert": 15,
+        "is_active": true,
+        "created_at": "2026-07-01T00:00:00Z",
+        "updated_at": "2026-08-01T00:00:00Z",
+        "sync_status": "synced"
+      },
+      {
+        "id": "prod-004",
+        "name": "Cooking Oil 1L",
+        "sku": "OIL-1L",
+        "price": 280,
+        "cost": 220,
+        "stock": 60,
+        "category": "Groceries",
+        "low_stock_alert": 10,
+        "is_active": true,
+        "created_at": "2026-07-01T00:00:00Z",
+        "updated_at": "2026-08-01T00:00:00Z",
+        "sync_status": "synced"
+      },
+      {
+        "id": "prod-005",
+        "name": "Eggs (Dozen)",
+        "sku": "EGGS-12",
+        "price": 420,
+        "cost": 300,
+        "stock": 50,
+        "category": "Dairy",
+        "low_stock_alert": 10,
+        "is_active": true,
+        "created_at": "2026-07-01T00:00:00Z",
+        "updated_at": "2026-08-01T00:00:00Z",
+        "sync_status": "synced"
+      }
+    ],
+    "customers": [
+      {
+        "id": "cust-001",
+        "name": "John Doe",
+        "phone": "0712345678",
+        "email": "john@example.com",
+        "loyalty_points": 500,
+        "total_spent": 15000,
+        "created_at": "2026-07-01T00:00:00Z",
+        "updated_at": "2026-08-01T00:00:00Z",
+        "sync_status": "synced"
+      },
+      {
+        "id": "cust-002",
+        "name": "Jane Smith",
+        "phone": "0787654321",
+        "email": "jane@example.com",
+        "loyalty_points": 300,
+        "total_spent": 8500,
+        "created_at": "2026-07-01T00:00:00Z",
+        "updated_at": "2026-08-01T00:00:00Z",
+        "sync_status": "synced"
+      },
+      {
+        "id": "cust-003",
+        "name": "Business Partner Ltd",
+        "phone": "0702000000",
+        "email": "business@example.com",
+        "loyalty_points": 1000,
+        "total_spent": 45000,
+        "created_at": "2026-07-01T00:00:00Z",
+        "updated_at": "2026-08-01T00:00:00Z",
+        "sync_status": "synced"
+      }
+    ],
+    "transactions": [
+      {
+        "id": "txn-001",
+        "customer_id": "cust-001",
+        "total_amount": 300,
+        "amount_paid": 300,
+        "change_amount": 0,
+        "payment_method": "cash",
+        "status": "completed",
+        "created_at": "2026-07-15T10:30:00Z",
+        "sync_status": "synced",
+        "items": [
+          {
+            "id": "item-001",
+            "product_id": "prod-001",
+            "product_name": "Milk 500ml",
+            "quantity": 3,
+            "unit_price": 65,
+            "subtotal": 195
+          },
+          {
+            "id": "item-002",
+            "product_id": "prod-002",
+            "product_name": "Bread",
+            "quantity": 2,
+            "unit_price": 55,
+            "subtotal": 110
+          }
+        ]
+      },
+      {
+        "id": "txn-002",
+        "customer_id": "cust-002",
+        "total_amount": 500,
+        "amount_paid": 500,
+        "change_amount": 0,
+        "payment_method": "mpesa",
+        "status": "completed",
+        "created_at": "2026-07-16T14:15:00Z",
+        "sync_status": "synced",
+        "items": [
+          {
+            "id": "item-003",
+            "product_id": "prod-003",
+            "product_name": "Sugar 1kg",
+            "quantity": 2,
+            "unit_price": 180,
+            "subtotal": 360
+          },
+          {
+            "id": "item-004",
+            "product_id": "prod-004",
+            "product_name": "Cooking Oil 1L",
+            "quantity": 1,
+            "unit_price": 280,
+            "subtotal": 280
+          }
+        ]
+      }
+    ]
+  }
+}
