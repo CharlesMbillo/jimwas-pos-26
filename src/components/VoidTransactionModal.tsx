@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { X, AlertTriangle, Loader2 } from 'lucide-react';
 import { createApprovalRequest } from '../lib/approvals';
 import { useAuth } from '../context/AuthContext';
@@ -17,6 +17,71 @@ export function VoidTransactionModal({ transaction, isOpen, onClose, onVoidCompl
   const toast = useToast();
   const [reason, setReason] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  const modalRef = useRef<HTMLDivElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    // Save previously focused element to restore on close
+    previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
+
+    // Focus the textarea if available, otherwise focus the modal container
+    const focusTarget = textareaRef.current ?? modalRef.current;
+    focusTarget?.focus();
+
+    const focusableSelector =
+      'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+    const modalEl = modalRef.current;
+    let focusableElements: HTMLElement[] = [];
+    if (modalEl) {
+      focusableElements = Array.from(modalEl.querySelectorAll<HTMLElement>(focusableSelector));
+    }
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+        return;
+      }
+
+      if (e.key === 'Tab') {
+        if (focusableElements.length === 0) {
+          e.preventDefault();
+          return;
+        }
+
+        const first = focusableElements[0];
+        const last = focusableElements[focusableElements.length - 1];
+        const active = document.activeElement as HTMLElement | null;
+
+        if (e.shiftKey) {
+          // Shift + Tab
+          if (active === first || active === modalEl) {
+            e.preventDefault();
+            last.focus();
+          }
+        } else {
+          // Tab
+          if (active === last) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
+      }
+    };
+
+    document.addEventListener('keydown', onKeyDown);
+
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      // restore focus
+      previouslyFocusedRef.current?.focus?.();
+    };
+  }, [isOpen, onClose]);
 
   if (!isOpen || !transaction || !user) return null;
 
@@ -61,12 +126,21 @@ export function VoidTransactionModal({ transaction, isOpen, onClose, onVoidCompl
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       {/* Make the modal a column so header/footer can stay visible while body scrolls */}
-      <div className="bg-slate-800 rounded-lg border border-red-500/50 max-w-md w-full mx-4 max-h-[80vh] overflow-hidden flex flex-col">
+      <div
+        ref={modalRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="void-transaction-title"
+        tabIndex={-1}
+        className="bg-slate-800 rounded-lg border border-red-500/50 max-w-md w-full mx-4 max-h-[80vh] overflow-hidden flex flex-col"
+      >
         {/* Header (non-scrolling) */}
         <div className="bg-red-900/30 px-6 py-4 border-b border-red-500/30 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-3">
             <AlertTriangle className="w-5 h-5 text-red-400" />
-            <h2 className="text-lg font-semibold text-red-400">Void Transaction</h2>
+            <h2 id="void-transaction-title" className="text-lg font-semibold text-red-400">
+              Void Transaction
+            </h2>
           </div>
           <button
             onClick={onClose}
@@ -117,6 +191,7 @@ export function VoidTransactionModal({ transaction, isOpen, onClose, onVoidCompl
               Reason for Void <span className="text-red-400">*</span>
             </label>
             <textarea
+              ref={textareaRef}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="Explain why this transaction is being voided..."
