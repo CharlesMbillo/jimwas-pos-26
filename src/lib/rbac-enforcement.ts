@@ -48,6 +48,15 @@ export async function enforceRouteAccess(
     };
   }
 
+  // Admin bypasses permission checks
+  if (user.role_code === 'admin') {
+    return {
+      allowed: true,
+      message: 'Route access granted',
+      requiresApproval: route.requiresApproval,
+    };
+  }
+
   // Check permissions if specified
   if (route.permissions && route.permissions.length > 0) {
     const hasPerm = await hasAllPermissions(user.id, route.permissions);
@@ -98,6 +107,11 @@ export async function enforceFeatureAccess(
       message: `Feature access denied for role: ${user.role_code}`,
       reason: `Only ${feature.allowedRoles.join(', ')} can use this feature`,
     };
+  }
+
+  // Admin bypasses permission checks
+  if (user.role_code === 'admin') {
+    return { allowed: true, message: 'Feature access granted' };
   }
 
   // Check permissions
@@ -151,6 +165,11 @@ export async function enforceComponentAccess(
     };
   }
 
+  // Admin bypasses permission checks
+  if (user.role_code === 'admin') {
+    return { allowed: true, message: 'Component access granted' };
+  }
+
   // Check permissions if specified
   if (component.requiredPermissions && component.requiredPermissions.length > 0) {
     const hasPerm = await hasAllPermissions(user.id, component.requiredPermissions);
@@ -183,6 +202,10 @@ export async function enforceActionAccess(
       message: 'User not authenticated',
       reason: 'User session required',
     };
+  }
+
+  if (user.role_code === 'admin') {
+    return { allowed: true, message: `Action ${action} allowed` };
   }
 
   if (requiredPermissions.length === 0) {
@@ -221,6 +244,10 @@ export async function enforceAnyActionAccess(
       message: 'User not authenticated',
       reason: 'User session required',
     };
+  }
+
+  if (user.role_code === 'admin') {
+    return { allowed: true, message: `Action ${action} allowed` };
   }
 
   if (requiredPermissions.length === 0) {
