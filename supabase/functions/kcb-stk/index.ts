@@ -1,6 +1,8 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.39.3";
 import { getAccessToken, stkPush } from "../lib/kcb_client.ts";
+import { checkRateLimit, getRateLimitHeaders } from "../lib/rate_limit.ts";
+import { logAuditEvent, createAlertIfNeeded } from "../lib/audit_log.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -39,6 +41,43 @@ Deno.serve(async (req: Request) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
     const supabase = createClient(supabaseUrl, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
+
+    // Extract client identifier for rate limiting
+    const authHeader = req.headers.get('authorization');
+    const clientId = authHeader?.split(' ')[1]?.slice(0, 10) || 'anonymous';
+
+    // Check rate limit (100 requests per minute per client)
+    const rateLimitResult = await checkRateLimit(supabase, clientId, {
+      maxRequests: 100,
+      windowSeconds: 60,
+      keyPrefix: 'stk-push',
+    });
+
+    if (!rateLimitResult.allowed) {
+      // Log rate limit event
+      await logAuditEvent(supabase, {
+        eventType: 'RATE_LIMIT_EXCEEDED',
+        actor: clientId,
+        resource: 'stk-push',
+        action: 'Rate limit exceeded',
+        status: 'BLOCKED',
+        metadata: { remaining: rateLimitResult.remaining, resetAt: rateLimitResult.resetAt },
+      }, req);
+
+      await createAlertIfNeeded(supabase, 'RATE_LIMIT_EXCEEDED', { clientId, resetAt: rateLimitResult.resetAt });
+
+      return new Response(
+        JSON.stringify({ error: 'Rate limit exceeded' }),
+        {
+          status: 429,
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'application/json',
+            ...getRateLimitHeaders(rateLimitResult),
+          },
+        }
+      );
+    }
 
     const body: STKPushRequest = await req.json();
 
@@ -118,9 +157,44 @@ Deno.serve(async (req: Request) => {
       console.debug('Failed to insert kcb_payments row:', err?.message ?? err);
     }
 
+    // Log successful STK push
+    await logAuditEvent(supabase, {
+      eventType: 'STK_PUSH_INITIATED',
+      actor: clientId,
+      resource: merchantRequestId || 'unknown',
+      action: `STK Push initiated for ${formattedPhone}`,
+      status: 'SUCCESS',
+      metadata: {
+        phone: formattedPhone,
+        amount: body.amount,
+        merchantRequestId,
+        checkoutRequestId,
+      },
+    }, req);
+
     return new Response(JSON.stringify({ success: true, merchantRequestId, checkoutRequestId, raw: pushResp }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (error) {
     console.error('kcb-stk error:', error);
+    
+    // Log error event
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+    const supabase = createClient(supabaseUrl, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
+    
+    await logAuditEvent(supabase, {
+      eventType: 'STK_PUSH_FAILED',
+      actor: 'system',
+      resource: 'stk-push',
+      action: 'STK Push failed',
+      status: 'FAILED',
+      metadata: {
+        error: error instanceof Error ? error.message : String(error),
+      },
+    }, req);
+
+    await createAlertIfNeeded(supabase, 'STK_PUSH_FAILED', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+
     return new Response(JSON.stringify({ error: error instanceof Error ? error.message : 'Internal error' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 });

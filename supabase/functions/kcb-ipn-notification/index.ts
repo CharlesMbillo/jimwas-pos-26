@@ -1,4 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
+import { verifySignature } from "../lib/signature.ts";
+import { logAuditEvent, createAlertIfNeeded } from "../lib/audit_log.ts";
 
 interface IPNPayload {
   merchantRequestId: string;
@@ -18,6 +20,10 @@ export async function handler(req: Request): Promise<Response> {
   try {
     // Parse incoming IPN notification from KCB
     const payload: IPNPayload = await req.json();
+    
+    // Extract signature from headers for verification
+    const signature = req.headers.get("x-signature");
+    const rawBody = await req.clone().text();
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -27,6 +33,46 @@ export async function handler(req: Request): Promise<Response> {
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Verify webhook signature if present
+    if (signature) {
+      const publicKeyPem = Deno.env.get("KCB_WEBHOOK_PUBLIC_KEY");
+      if (publicKeyPem) {
+        const isValid = await verifySignature(publicKeyPem, rawBody, signature);
+        if (!isValid) {
+          console.error("[v0] IPN signature verification failed");
+          
+          // Log failed verification
+          await logAuditEvent(supabase, {
+            eventType: 'SIGNATURE_VERIFICATION_FAILED',
+            actor: 'kcb-webhook',
+            resource: payload.merchantRequestId,
+            action: 'IPN signature verification failed',
+            status: 'FAILED',
+            metadata: { payloadId: payload.merchantRequestId },
+          }, req);
+
+          await createAlertIfNeeded(supabase, 'SIGNATURE_VERIFICATION_FAILED', {
+            merchantRequestId: payload.merchantRequestId,
+          });
+
+          return new Response(
+            JSON.stringify({ error: 'Signature verification failed' }),
+            { status: 401, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        // Log verified IPN
+        await logAuditEvent(supabase, {
+          eventType: 'IPN_VERIFIED',
+          actor: 'kcb-webhook',
+          resource: payload.merchantRequestId,
+          action: 'IPN signature verified successfully',
+          status: 'SUCCESS',
+          metadata: { responseCode: payload.responseCode },
+        }, req);
+      }
+    }
 
     console.log("[v0] IPN Notification received:", {
       merchantRequestId: payload.merchantRequestId,
@@ -66,6 +112,20 @@ export async function handler(req: Request): Promise<Response> {
       id: paymentData.id,
       status: paymentStatus,
     });
+
+    // Log payment status update
+    await logAuditEvent(supabase, {
+      eventType: 'IPN_RECEIVED',
+      actor: 'kcb-webhook',
+      resource: payload.merchantRequestId,
+      action: `Payment status updated to ${paymentStatus}`,
+      status: 'SUCCESS',
+      metadata: {
+        paymentStatus,
+        responseCode: payload.responseCode,
+        mpesaReceipt: payload.mpesaReceiptNumber,
+      },
+    }, req);
 
     // If payment successful, trigger invoice creation
     if (paymentStatus === "SUCCESS") {
@@ -130,6 +190,30 @@ export async function handler(req: Request): Promise<Response> {
     );
   } catch (error) {
     console.error("[v0] IPN Notification Error:", error);
+    
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    
+    if (supabaseUrl && supabaseServiceKey) {
+      const supabase = createClient(supabaseUrl, supabaseServiceKey);
+      
+      // Log IPN processing error
+      await logAuditEvent(supabase, {
+        eventType: 'IPN_FAILED',
+        actor: 'kcb-webhook',
+        resource: 'unknown',
+        action: 'IPN processing failed',
+        status: 'FAILED',
+        metadata: {
+          error: error instanceof Error ? error.message : String(error),
+        },
+      }, req);
+
+      await createAlertIfNeeded(supabase, 'IPN_FAILED', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
     return new Response(
       JSON.stringify({
         success: false,
