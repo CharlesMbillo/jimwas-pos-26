@@ -35,32 +35,30 @@ class ConfigManager {
       retryDelay: KCB_API_DEFAULTS.RETRY_DELAY,
     };
 
-    this.validateConfig();
-    this.validated = true;
+    const errors = this.validateConfig();
+    if (errors.length > 0) {
+      console.warn('[KCB Config] Configuration incomplete:', errors);
+    }
+    this.validated = errors.length === 0;
 
     return this.config;
   }
 
   /**
    * Get a single environment variable with optional default
+   * Returns empty string if missing and no default provided (graceful degradation)
    */
   private getEnv(key: string, defaultValue?: string): string {
     const value = import.meta.env[`VITE_${key}`];
-
-    if (!value && !defaultValue) {
-      throw new Error(`Missing required environment variable: VITE_${key}`);
-    }
-
     return value || defaultValue || '';
   }
 
   /**
    * Validate configuration values
+   * Returns array of error messages (empty if valid)
    */
-  private validateConfig(): void {
-    if (!this.config) {
-      throw new Error('Configuration not initialized');
-    }
+  private validateConfig(): string[] {
+    if (!this.config) return ['Configuration not initialized'];
 
     const errors: string[] = [];
 
@@ -96,9 +94,7 @@ class ConfigManager {
       errors.push('KCB_PUBLIC_CERT_PATH is required');
     }
 
-    if (errors.length > 0) {
-      throw new Error(`Configuration validation failed:\n${errors.join('\n')}`);
-    }
+    return errors;
   }
 
   /**
