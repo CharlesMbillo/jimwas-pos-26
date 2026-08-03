@@ -3,11 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { RoleGuard } from '../context/AuthContext';
-import {
-  Settings, Users, CreditCard, Building, Save, Plus, Edit, Trash2, Eye, EyeOff,
-  Check, X, Smartphone, ToggleLeft, ToggleRight, Shield, RefreshCw, AlertCircle, Clock, Printer, CheckCircle2,
-  Loader2, Cloud, CloudOff, FlaskConical, Zap
-} from 'lucide-react';
+import { Settings, Users, CreditCard, Building, Save, Plus, CreditCard as Edit, Trash2, Eye, EyeOff, Check, X, Smartphone, ToggleLeft, ToggleRight, Shield, RefreshCw, AlertCircle, Clock, Printer, CheckCircle2, Loader2, Cloud, CloudOff, FlaskConical, Zap } from 'lucide-react';
 import {
   BusinessSettings,
   KCBSettings,
@@ -70,24 +66,25 @@ export function SettingsPage() {
   // Auto-save KCB settings with debounce
   useEffect(() => {
     const timer = setTimeout(async () => {
-      // Only auto-save if settings have changed and are not in default state
-      if (kcbSettings.sync_status === 'pending' && (kcbSettings.client_id || kcbSettings.client_secret || kcbSettings.org_shortcode)) {
+      // Auto-save whenever settings are marked pending — covers credential edits AND toggle changes
+      if (kcbSettings.sync_status === 'pending') {
         try {
           setAutoSaving(true);
-          await saveKCBSettings({
+          const saved = await saveKCBSettings({
             ...kcbSettings,
             last_updated: new Date().toISOString(),
             last_updated_by: user?.id,
             updated_at: new Date().toISOString(),
             sync_status: 'pending' as const,
           });
+          if (saved) setKCBSettings(saved);
         } catch (error) {
           console.error('[v0] Auto-save failed for KCB settings:', error);
         } finally {
           setAutoSaving(false);
         }
       }
-    }, 3000); // 3 second debounce
+    }, 1500); // 1.5 second debounce
 
     return () => clearTimeout(timer);
   }, [kcbSettings, user?.id]);
@@ -322,7 +319,7 @@ export function SettingsPage() {
           <PaymentsTab
             kcbSettings={kcbSettings}
             paymentMethods={paymentMethods}
-            onMpesaChange={setKCBSettings}
+            onMpesaChange={(s) => setKCBSettings({ ...s, sync_status: 'pending' as const })}
             onTogglePayment={togglePaymentMethod}
             onSaveMpesa={saveMpesa}
             saving={saving}
