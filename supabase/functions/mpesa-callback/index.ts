@@ -4,66 +4,84 @@ import { createClient } from "npm:@supabase/supabase-js@2.39.3";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey, x-kcb-signature",
 };
 
-interface MpesaCallbackBody {
-  Body: {
-    stkCallback: {
-      MerchantRequestID: string;
-      CheckoutRequestID: string;
-      ResultCode: number;
-      ResultDesc: string;
-      CallbackMetadata?: {
-        Item: Array<{
-          Name: string;
-          Value?: string | number;
-        }>;
-      };
-    };
-  };
+function pemToArrayBuffer(pem: string): ArrayBuffer {
+  const b64 = pem.replace(/-----BEGIN PUBLIC KEY-----/g, '').replace(/-----END PUBLIC KEY-----/g, '').replace(/\r?\n|\r/g, '').trim();
+  const binary = atob(b64);
+  const len = binary.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes.buffer;
+}
+
+function base64ToArrayBuffer(base64: string): ArrayBuffer {
+  const binary = atob(base64);
+  const len = binary.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes.buffer;
+}
+
+async function verifySignature(rawBody: string, signatureBase64: string, publicPem: string): Promise<boolean> {
+  try {
+    if (!publicPem || !signatureBase64) return false;
+    const publicKeyDer = pemToArrayBuffer(publicPem);
+    const publicKey = await crypto.subtle.importKey(
+      'spki',
+      publicKeyDer,
+      { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+      false,
+      ['verify']
+    );
+    const encoder = new TextEncoder();
+    const data = encoder.encode(rawBody);
+    const signature = base64ToArrayBuffer(signatureBase64);
+    return await crypto.subtle.verify('RSASSA-PKCS1-v1_5', publicKey, signature, data);
+  } catch (e) {
+    console.error('Signature verification error:', e);
+    return false;
+  }
 }
 
 Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { status: 200, headers: corsHeaders });
-  }
-
-  if (req.method !== "POST") {
-    return new Response(
-      JSON.stringify({ error: "Method not allowed" }),
-      { status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
+  if (req.method === "OPTIONS") return new Response(null, { status: 200, headers: corsHeaders });
+  if (req.method !== "POST") return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
   try {
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
-    );
+    const rawBody = await req.text();
+    const signature = req.headers.get('x-kcb-signature') ?? req.headers.get('X-KCB-SIGNATURE') ?? '';
+    const publicPem = Deno.env.get('KCB_PUBLIC_PEM') ?? '';
 
-    const body: MpesaCallbackBody = await req.json();
-    const { stkCallback } = body.Body;
+    if (publicPem) {
+      const valid = await verifySignature(rawBody, signature, publicPem);
+      if (!valid) {
+        console.warn('Invalid KCB signature; rejecting callback');
+        return new Response(JSON.stringify({ ResultCode: '401', ResultDesc: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+    } else {
+      console.warn('KCB public cert not configured (KCB_PUBLIC_PEM); skipping signature verification');
+    }
 
-    console.log('M-Pesa Callback received:', JSON.stringify(body, null, 2));
+    const body = JSON.parse(rawBody);
+    const supabase = createClient(Deno.env.get("SUPABASE_URL") ?? "", Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "");
+    const stkCallback = body?.Body?.stkCallback;
+    if (!stkCallback) {
+      console.warn('Callback missing stkCallback body', body);
+      return new Response(JSON.stringify({ ResultCode: 0, ResultDesc: 'Acknowledged' }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
 
     const checkoutRequestId = stkCallback.CheckoutRequestID;
-    const merchantRequestId = stkCallback.MerchantRequestID;
     const resultCode = stkCallback.ResultCode;
     const resultDesc = stkCallback.ResultDesc;
 
-    // Extract callback metadata if payment was successful
     let mpesaReceiptNumber: string | null = null;
     let transactionDate: string | null = null;
-    let phoneNumber: string | null = null;
-    let amount: number | null = null;
-
     if (stkCallback.CallbackMetadata?.Item) {
-      console.log('Callback metadata:', JSON.stringify(stkCallback.CallbackMetadata.Item, null, 2));
       for (const item of stkCallback.CallbackMetadata.Item) {
         switch (item.Name) {
           case 'Amount':
-            amount = Number(item.Value) || null;
             break;
           case 'MpesaReceiptNumber':
             mpesaReceiptNumber = String(item.Value || '');
@@ -72,36 +90,19 @@ Deno.serve(async (req: Request) => {
             transactionDate = String(item.Value || '');
             break;
           case 'PhoneNumber':
-            phoneNumber = String(item.Value || '');
             break;
         }
       }
     }
 
-    // Determine status based on result code
-    // Reference: https://developer.safaricom.co.ke/APIs/MpesaExpressSimulate
     let status: string;
-    if (resultCode === 0) {
-      status = 'success';
-    } else if (resultCode === 1032) {
-      // Request cancelled by user
-      status = 'cancelled';
-    } else if (resultCode === 1001) {
-      // Timeout - user didn't respond
-      status = 'timeout';
-    } else if (resultCode === 1) {
-      // Insufficient balance
-      status = 'insufficient_balance';
-    } else if (resultCode === 2001) {
-      // Invalid PIN
-      status = 'invalid_pin';
-    } else {
-      status = 'failed';
-    }
+    if (resultCode === 0) status = 'success';
+    else if (resultCode === 1032) status = 'cancelled';
+    else if (resultCode === 1001) status = 'timeout';
+    else if (resultCode === 1) status = 'insufficient_balance';
+    else if (resultCode === 2001) status = 'invalid_pin';
+    else status = 'failed';
 
-    console.log(`Transaction ${checkoutRequestId}: status=${status}, resultCode=${resultCode}, receipt=${mpesaReceiptNumber}`);
-
-    // Update transaction in database
     const { data: updatedTx, error: updateError } = await supabase
       .from('mpesa_transactions')
       .update({
@@ -120,16 +121,9 @@ Deno.serve(async (req: Request) => {
 
     if (updateError) {
       console.error('Failed to update mpesa transaction:', updateError);
-      // Still return success to M-Pesa to avoid retries
-      return new Response(
-        JSON.stringify({ ResultCode: 0, ResultDesc: 'Acknowledged' }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ ResultCode: 0, ResultDesc: 'Acknowledged' }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    console.log('Transaction updated successfully:', updatedTx?.id);
-
-    // If payment successful and linked to a transaction, update it
     if (status === 'success' && updatedTx?.transaction_id) {
       const { error: txUpdateError } = await supabase
         .from('transactions')
@@ -140,25 +134,13 @@ Deno.serve(async (req: Request) => {
         })
         .eq('id', updatedTx.transaction_id);
 
-      if (txUpdateError) {
-        console.error('Failed to update transaction:', txUpdateError);
-      } else {
-        console.log(`Transaction ${updatedTx.transaction_id} marked as completed`);
-      }
+      if (txUpdateError) console.error('Failed to update transaction:', txUpdateError);
     }
 
-    // Return success to M-Pesa (must always return 200 with ResultCode: 0)
-    return new Response(
-      JSON.stringify({ ResultCode: 0, ResultDesc: 'Success' }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return new Response(JSON.stringify({ ResultCode: 0, ResultDesc: 'Success' }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
   } catch (error) {
     console.error('M-Pesa callback error:', error);
-    // Still return success to avoid M-Pesa retries
-    return new Response(
-      JSON.stringify({ ResultCode: 0, ResultDesc: 'Acknowledged' }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return new Response(JSON.stringify({ ResultCode: 0, ResultDesc: 'Acknowledged' }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 });
