@@ -57,6 +57,27 @@ export async function initiateKCBSTKPush(
     transactionDesc?: string;
   }
 ): Promise<STKPushResponse> {
+  // 1. Create local payment record immediately so UI shows pending
+  const payment = await createKCBPaymentRecord(phone, amount, {
+    transactionId: options?.transactionId,
+    cashierId: options?.cashierId,
+    checkoutRequestId: options?.checkoutRequestId,
+    merchantRequestId: options?.merchantRequestId,
+  });
+
+  const payload = {
+    phone,
+    amount,
+    accountReference: options?.accountReference ?? payment.id,
+    transactionDesc: options?.transactionDesc ?? 'POS Payment',
+    transactionId: options?.transactionId,
+  };
+
+  // 2. Enforce timeout using AbortController (10s)
+  const controller = new AbortController();
+  const timeoutMs = 10000;
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
   try {
     const response = await fetch(`${SUPABASE_URL}/functions/v1/kcb-stk-push`, {
       method: 'POST',
@@ -64,38 +85,55 @@ export async function initiateKCBSTKPush(
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
       },
-      body: JSON.stringify({
-        phone,
-        amount,
-        ...options,
-      }),
+      body: JSON.stringify(payload),
+      signal: controller.signal,
     });
 
-    // Safely parse JSON response
-    let data;
+    clearTimeout(timer);
+
+    const text = await response.text();
+    if (!text) {
+      await recordMpesaFailure(payment.id, 'failed', 'Empty response from KCB service');
+      return { success: false, error: 'Empty response from KCB service' };
+    }
+
+    let data: any;
     try {
-      const text = await response.text();
-      if (!text) {
-        return { success: false, error: 'Empty response from KCB service' };
-      }
       data = JSON.parse(text);
-    } catch (parseError) {
-      console.error('[v0] JSON parse error in initiateKCBSTKPush:', parseError);
+    } catch (err) {
+      console.error('[v0] JSON parse error in initiateKCBSTKPush:', err);
+      await recordMpesaFailure(payment.id, 'failed', 'Invalid JSON from KCB service');
       return { success: false, error: 'Invalid response from KCB service' };
     }
 
     if (!response.ok) {
+      await recordMpesaFailure(payment.id, 'failed', data?.error || 'Failed to initiate payment');
       return { success: false, error: data?.error || 'Failed to initiate payment' };
     }
 
+    const checkoutRequestId = data.checkoutRequestId || data.CheckoutRequestID || data.checkout_request_id;
+    const merchantRequestId = data.merchantRequestId || data.merchant_request_id || undefined;
+
+    if (!checkoutRequestId) {
+      // Provider did not return a checkoutRequestId → cannot trigger phone prompt
+      await recordMpesaFailure(payment.id, 'failed', 'No CheckoutRequestID returned');
+      return { success: false, error: 'No CheckoutRequestID returned from provider' };
+    }
+
+    // Persist checkoutRequestId and mark processing
+    await recordMpesaInitiation(payment.id, checkoutRequestId, merchantRequestId);
+
     return {
       success: true,
-      checkoutRequestId: data.checkoutRequestId,
-      merchantRequestId: data.merchantRequestId,
-      mpesaTransactionId: data.mpesaTransactionId,
+      checkoutRequestId,
+      merchantRequestId,
+      mpesaTransactionId: data.mpesaTransactionId || data.MpesaTransactionID || undefined,
     };
-  } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Network error' };
+  } catch (err: any) {
+    clearTimeout(timer);
+    const message = err?.name === 'AbortError' ? 'Request timed out' : err?.message || String(err);
+    await recordMpesaFailure(payment.id, 'failed', message);
+    return { success: false, error: message };
   }
 }
 
