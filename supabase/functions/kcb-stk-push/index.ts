@@ -18,7 +18,6 @@ interface STKPushRequest {
   transactionDesc?: string;
 }
 
-// Format phone to 254XXXXXXXXX
 function formatPhone(phone: string): string {
   let p = phone.replace(/\D/g, "");
   if (p.startsWith("0") && p.length === 10) return "254" + p.slice(1);
@@ -93,7 +92,7 @@ Deno.serve(async (req: Request) => {
       .from("kcb_settings")
       .select("*")
       .eq("id", "kcb-settings")
-      .single();
+      .maybeSingle();
 
     if (settingsError || !settings) {
       return new Response(
@@ -131,13 +130,17 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Get environment-specific URLs
-    const baseUrl = settings.environment === 'production'
-      ? 'https://api.kcb.co.ke'
-      : 'https://api.sandbox.kcb.co.ke';
-    
-    const tokenUrl = `${baseUrl}/oauth/token`;
-    const stkPushUrl = `${baseUrl}/stk/push`;
+    // Determine environment-specific base URL
+    // Use callback_url from settings if available, otherwise construct from Supabase URL
+    const callbackUrl = settings.callback_url || `${supabaseUrl}/functions/v1/kcb-ipn-notification`;
+
+    // Determine the KCB API base URL from settings or environment
+    const envBaseUrl = settings.environment === 'production'
+      ? (Deno.env.get('KCB_BUNI_BASE_URL') || 'https://api.kcb.co.ke')
+      : (Deno.env.get('KCB_BUNI_SANDBOX_URL') || Deno.env.get('KCB_BUNI_BASE_URL') || 'https://api.sandbox.kcb.co.ke');
+
+    const tokenUrl = `${envBaseUrl}/oauth/token`;
+    const stkPushUrl = `${envBaseUrl}/mm/api/request/1.0.0/stkpush`;
 
     // Get access token
     let token: string;
@@ -150,29 +153,39 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Prepare STK Push request
-    const timestamp = new Date().toISOString();
+    // Prepare STK Push request per KCB BUNI spec
+    const messageId = `JIMWAS-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
     const stkPayload = {
       phoneNumber: formattedPhone,
-      amount: Math.floor(body.amount), // Ensure integer
-      invoiceNumber: body.transactionId || `INV-${Date.now()}`,
+      amount: String(body.amount),
+      invoiceNumber: body.accountReference || `INV-${Date.now()}`,
+      sharedShortCode: false,
       orgShortCode: settings.org_shortcode,
       orgPassKey: settings.org_passkey,
-      transactionDescription: body.transactionDesc || `${settings.business_name || 'POS'} Payment`,
-      callbackUrl: `${supabaseUrl}/functions/v1/kcb-callback`,
-      sharedShortCode: false,
-      businessPaybill: settings.business_paybill || '522522',
-      businessAccount: settings.business_account || '7941675',
-      businessName: settings.business_name || 'JIMWASENTERPRISES',
-      metadata: {
-        cashierId: body.cashierId,
-        cashierName: body.cashierName,
-        accountReference: body.accountReference,
-        paybill: settings.business_paybill,
-        account: settings.business_account,
-        businessName: settings.business_name,
-      },
+      callbackUrl,
+      transactionDescription: body.transactionDesc || 'POS Payment',
     };
+
+    // Insert pending payment record into kcb_payments BEFORE calling KCB
+    // so the callback can find it even if the STK response is slow
+    const { data: paymentRow, error: insertError } = await supabase
+      .from('kcb_payments')
+      .insert({
+        phone_number: formattedPhone,
+        amount: body.amount,
+        status: 'pending',
+        cashier_id: body.cashierId || null,
+        cashier_name: body.cashierName || null,
+        raw_request: stkPayload,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (insertError) {
+      console.error('[kcb-stk-push] Failed to insert kcb_payments row:', insertError);
+    }
 
     // Call KCB STK Push
     const stkResponse = await fetch(stkPushUrl, {
@@ -180,12 +193,16 @@ Deno.serve(async (req: Request) => {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
+        'accept': 'application/json',
+        'routeCode': '207',
+        'operation': 'STKPush',
+        'messageId': messageId,
       },
       body: JSON.stringify(stkPayload),
     });
 
     const stkText = await stkResponse.text();
-    console.error('[v0] KCB STK Response - Status:', stkResponse.status, 'Body:', stkText, 'URL:', stkPushUrl);
+    console.log('[kcb-stk-push] KCB STK Response - Status:', stkResponse.status, 'Body:', stkText);
 
     if (!stkResponse.ok) {
       let errorMsg = `STK Push failed (${stkResponse.status})`;
@@ -193,6 +210,17 @@ Deno.serve(async (req: Request) => {
         const errorData = JSON.parse(stkText);
         errorMsg = errorData.ResponseDescription || errorData.message || errorMsg;
       } catch { /* ignore */ }
+
+      // Update payment record with error
+      if (paymentRow) {
+        await supabase.from('kcb_payments').update({
+          status: 'failed',
+          error_message: errorMsg,
+          raw_response: stkText ? JSON.parse(stkText) : null,
+          updated_at: new Date().toISOString(),
+        }).eq('id', paymentRow.id);
+      }
+
       return new Response(
         JSON.stringify({ error: errorMsg }),
         { status: stkResponse.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -200,8 +228,16 @@ Deno.serve(async (req: Request) => {
     }
 
     if (!stkText) {
+      const errorMsg = "Empty response from KCB service";
+      if (paymentRow) {
+        await supabase.from('kcb_payments').update({
+          status: 'failed',
+          error_message: errorMsg,
+          updated_at: new Date().toISOString(),
+        }).eq('id', paymentRow.id);
+      }
       return new Response(
-        JSON.stringify({ error: "Empty response from KCB service - no body returned" }),
+        JSON.stringify({ error: errorMsg }),
         { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -210,27 +246,86 @@ Deno.serve(async (req: Request) => {
     try {
       stkData = JSON.parse(stkText);
     } catch (parseError) {
-      console.error('[v0] Failed to parse KCB response:', parseError, 'Text:', stkText);
+      console.error('[kcb-stk-push] Failed to parse KCB response:', parseError);
+      if (paymentRow) {
+        await supabase.from('kcb_payments').update({
+          status: 'failed',
+          error_message: 'Invalid JSON response from KCB',
+          raw_response: { raw: stkText },
+          updated_at: new Date().toISOString(),
+        }).eq('id', paymentRow.id);
+      }
       return new Response(
         JSON.stringify({ error: "Invalid JSON response from KCB service" }),
         { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
+    // Extract IDs from KCB response (handle multiple possible field names)
+    const checkoutRequestId = stkData.CheckoutRequestID || stkData.checkoutRequestId || stkData.checkout_request_id;
+    const merchantRequestId = stkData.MerchantRequestID || stkData.merchantRequestId || stkData.merchant_request_id;
+    const responseCode = stkData.ResponseCode || stkData.responseCode || stkData.code;
+
+    // Check if STK push was accepted by KCB
+    // KCB returns ResponseCode "00000000" for success
+    if (responseCode && responseCode !== '00000000' && responseCode !== '0') {
+      const errorMsg = stkData.ResponseDescription || stkData.responseMessage || stkData.message || 'STK Push rejected by KCB';
+      if (paymentRow) {
+        await supabase.from('kcb_payments').update({
+          status: 'failed',
+          error_message: errorMsg,
+          result_code: String(responseCode),
+          result_desc: stkData.ResponseDescription || stkData.responseMessage,
+          raw_response: stkData,
+          updated_at: new Date().toISOString(),
+        }).eq('id', paymentRow.id);
+      }
+      return new Response(
+        JSON.stringify({ error: errorMsg }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (!checkoutRequestId) {
+      const errorMsg = 'No CheckoutRequestID returned by KCB';
+      if (paymentRow) {
+        await supabase.from('kcb_payments').update({
+          status: 'failed',
+          error_message: errorMsg,
+          raw_response: stkData,
+          updated_at: new Date().toISOString(),
+        }).eq('id', paymentRow.id);
+      }
+      return new Response(
+        JSON.stringify({ error: errorMsg }),
+        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Update payment record with checkout/merchant IDs and mark as processing
+    if (paymentRow) {
+      await supabase.from('kcb_payments').update({
+        checkout_request_id: checkoutRequestId,
+        merchant_request_id: merchantRequestId || null,
+        status: 'processing',
+        raw_response: stkData,
+        updated_at: new Date().toISOString(),
+      }).eq('id', paymentRow.id);
+    }
+
     // Return success response
     return new Response(
       JSON.stringify({
         success: true,
-        checkoutRequestId: stkData.CheckoutRequestID || stkData.checkoutRequestId,
-        merchantRequestId: stkData.MerchantRequestID || stkData.merchantRequestId,
-        mpesaTransactionId: stkData.MpesaTransactionID || stkData.mpesaTransactionId,
-        responseCode: stkData.ResponseCode || stkData.responseCode,
-        responseMessage: stkData.ResponseDescription || stkData.responseMessage,
+        checkoutRequestId,
+        merchantRequestId,
+        responseCode,
+        responseMessage: stkData.ResponseDescription || stkData.responseMessage || 'STK Push initiated',
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error: any) {
-    console.error('KCB STK Push error:', error);
+    console.error('[kcb-stk-push] Error:', error);
     return new Response(
       JSON.stringify({ error: error?.message || 'Internal server error' }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

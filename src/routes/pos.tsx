@@ -53,7 +53,7 @@ export function POSTerminal() {
   const [kcbEnabled, setKCBEnabled] = useState<boolean | null>(null);
   const [kcbConfigured, setKCBConfigured] = useState<boolean>(false);
   const [kcbEnvironment, setKCBEnvironment] = useState<'sandbox' | 'production'>('sandbox');
-  const [kcbSimulating, setKCBSimulating] = useState(false);
+
   
   // Sale type state
   const [saleType, setSaleType] = useState<'standard' | 'wholesale' | 'lipa_mdogo' | 'kyama'>('standard');
@@ -112,7 +112,7 @@ export function POSTerminal() {
       const { data } = await supabase
         .from('kcb_settings')
         .select('*')
-        .eq('id', 'kcb-buni-settings')
+        .eq('id', 'kcb-settings')
         .maybeSingle();
       if (data) kcbSettings = data;
     }
@@ -285,21 +285,7 @@ export function POSTerminal() {
     setKCBError(null);
     setKCBStartTime(new Date());
 
-    // Sandbox: wait for user to confirm payment
-    if (kcbEnvironment === 'sandbox') {
-      try {
-        const receiptNumber = (await import('../lib/mpesa')).generateMpesaReceiptNumber();
-        setKCBCheckoutId(receiptNumber);
-        setKCBStatus('waiting');
-        toast.show(`Sandbox STK Push sent to ${formattedPhone}. Check your phone or click "Confirm Payment" to complete.`);
-      } catch (error) {
-        setKCBStatus('failed');
-        setKCBError(error instanceof Error ? error.message : 'Sandbox simulation failed');
-      }
-      return;
-    }
-
-    // Production: call real API
+    // Always call the real KCB BUNI STK Push API — sandbox sends real prompts to test numbers
     try {
       const result = await initiateKCBSTKPush(formattedPhone, cartTotal, {
         cashierId: user?.id,
@@ -331,10 +317,10 @@ export function POSTerminal() {
 
       if (statusResult.status === 'success') {
         setKCBStatus('success');
-        setKCBReceiptNumber(statusResult.kcbReceiptNumber || null);
+        setKCBReceiptNumber(statusResult.mpesaReceiptNumber || null);
         toast.show('KCB payment successful!');
         // Auto-complete the sale
-        await completeKCBSTKSale(statusResult.kcbReceiptNumber);
+        await completeKCBSTKSale(statusResult.mpesaReceiptNumber);
       } else if (statusResult.status === 'cancelled') {
         setKCBStatus('cancelled');
         setKCBError('Payment was cancelled by user');
@@ -351,33 +337,6 @@ export function POSTerminal() {
     } catch (error) {
       setKCBStatus('failed');
       setKCBError(error instanceof Error ? error.message : 'KCB payment error occurred');
-    }
-  };
-
-  // Sandbox only: complete the test payment locally. This intentionally avoids
-  // depending on a deployed callback function because no real money moves.
-  const handleSimulatePayment = async () => {
-    if (kcbEnvironment !== 'sandbox' || kcbSimulating) return;
-
-    setKCBSimulating(true);
-    setKCBError(null);
-
-    try {
-      const receiptNumber = (await import('../lib/mpesa')).generateMpesaReceiptNumber();
-      const result = await completeKCBSTKSale(receiptNumber);
-
-      if (result?.success === false) {
-        throw new Error(result.error || 'Could not complete the simulated sale');
-      }
-
-      setKCBReceiptNumber(receiptNumber);
-      setKCBStatus('success');
-      toast.show('KCB sandbox payment simulated successfully!');
-    } catch (error) {
-      setKCBStatus('failed');
-      setKCBError(error instanceof Error ? error.message : 'KCB sandbox simulation failed');
-    } finally {
-      setKCBSimulating(false);
     }
   };
 
@@ -1054,26 +1013,6 @@ export function POSTerminal() {
                         </div>
                       </div>
 
-                      {/* Sandbox simulate button */}
-                      {kcbEnvironment === 'sandbox' && kcbStatus === 'waiting' && (
-                        <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-3 sticky bottom-0 z-10">
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="flex items-center gap-2">
-                              <FlaskConical size={14} className="text-blue-400" />
-                              <p className="text-blue-300 text-xs font-medium">Sandbox: no phone prompt is sent</p>
-                            </div>
-                            <button
-                              onClick={handleSimulatePayment}
-                              disabled={kcbSimulating}
-                              className="flex items-center gap-2 bg-blue-700 hover:bg-blue-600 disabled:opacity-50 text-white text-xs font-bold px-3 py-2 rounded-lg transition whitespace-nowrap"
-                            >
-                              {kcbSimulating ? <Loader2 size={12} className="animate-spin" /> : <Zap size={12} />}
-                              Simulate Success
-                            </button>
-                          </div>
-                          <p className="text-blue-400/60 text-[10px] mt-1.5">Simulates KCB sandbox payment to mark this transaction as successful for testing</p>
-                        </div>
-                      )}
                     </div>
                   )}
 
@@ -1196,25 +1135,7 @@ export function POSTerminal() {
                         Try Again
                       </button>
 
-                      {/* Sandbox simulate in failed state */}
-                      {kcbEnvironment === 'sandbox' && (
-                        <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-3">
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="flex items-center gap-2">
-                              <FlaskConical size={14} className="text-blue-400" />
-                              <p className="text-blue-300 text-xs font-medium">KCB Sandbox: simulate successful payment</p>
-                            </div>
-                            <button
-                              onClick={handleSimulatePayment}
-                              disabled={kcbSimulating}
-                              className="flex items-center gap-2 bg-blue-700 hover:bg-blue-600 disabled:opacity-50 text-white text-xs font-bold px-3 py-2 rounded-lg transition whitespace-nowrap"
-                            >
-                              {kcbSimulating ? <Loader2 size={12} className="animate-spin" /> : <Zap size={12} />}
-                              Simulate Success
-                            </button>
-                          </div>
-                        </div>
-                      )}
+
                     </div>
                   )}
                 </div>
