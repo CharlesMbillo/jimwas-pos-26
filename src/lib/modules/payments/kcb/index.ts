@@ -10,7 +10,6 @@ export type {
   STKPushRequest,
   STKPushResponse,
   STKPushPayload,
-  PaymentStatus,
   IPNPayload,
   IPNRequest,
   PaymentTransaction,
