@@ -20,19 +20,19 @@ export async function initializeApp(): Promise<void> {
 
     try {
       // Check if business settings exist
-      const existingSettings = await db.get('business_settings', 'default');
+      const existingSettings = await db.get('business_settings', DEFAULT_BUSINESS_SETTINGS.id);
       if (!existingSettings) {
         console.log('[v0] Initializing default business settings...');
         
-        // Create all default settings in IndexedDB with sequential puts to avoid race conditions
-        await db.put('business_settings', DEFAULT_BUSINESS_SETTINGS, 'default');
-        await db.put('kcb_settings', DEFAULT_KCB_SETTINGS, 'kcb-settings');
-        await db.put('loyalty_settings', DEFAULT_LOYALTY_SETTINGS, 'default');
-        await db.put('receipt_settings', DEFAULT_RECEIPT_SETTINGS, 'default');
+        // Stores use inline key paths, so persist the records without a separate key argument.
+        await db.put('business_settings', DEFAULT_BUSINESS_SETTINGS);
+        await db.put('kcb_settings', DEFAULT_KCB_SETTINGS);
+        await db.put('loyalty_settings', DEFAULT_LOYALTY_SETTINGS);
+        await db.put('receipt_settings', DEFAULT_RECEIPT_SETTINGS);
 
         // Initialize payment methods sequentially
         for (const method of DEFAULT_PAYMENT_METHODS) {
-          await db.put('payment_methods', method, method.id);
+          await db.put('payment_methods', method);
         }
 
         console.log('[v0] Default settings initialized successfully');
