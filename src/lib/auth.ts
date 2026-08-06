@@ -1,9 +1,9 @@
 // Authentication Service for Jimwas POS
 // Handles login, logout, session management, and password operations
 
-import { generateId, saveUser, getUserByUsername, getUser, saveLoginHistory, saveSecurityEvent } from './db';
-import type { User, Role, RoleCode } from './security-types';
-import { getRoleByCode, saveRole, getAllRoles } from './db';
+import { generateId, saveUser, getUserByUsername, getUser, saveLoginHistory } from './db';
+import type { User, RoleCode } from './security-types';
+import { getRoleByCode } from './db';
 
 // Session storage keys
 const SESSION_KEY = 'pos_session';
@@ -39,17 +39,17 @@ async function hashPassword(password: string, existingHash?: string): Promise<st
   const derivedKey = await crypto.subtle.deriveKey(
     {
       name: 'PBKDF2',
-      salt,
+      salt: salt.slice().buffer as ArrayBuffer,
       iterations: 100000,
       hash: 'SHA-256',
     },
     keyMaterial,
     { name: 'AES-GCM', length: 256 },
-    false,
+    true,
     ['encrypt']
   );
 
-  // Export the derived key to get the hash bytes
+  // Export the derived key to get the deterministic PBKDF2 hash bytes.
   const exportedKey = await crypto.subtle.exportKey('raw', derivedKey);
   const hashArray = Array.from(new Uint8Array(exportedKey));
   const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
@@ -304,8 +304,8 @@ export async function changePassword(userId: string, oldPassword: string, newPas
     return { success: false, error: 'Current password is incorrect' };
   }
 
-  if (newPassword.length < 6) {
-    return { success: false, error: 'New password must be at least 6 characters' };
+  if (newPassword.length < 8 || !/[A-Z]/.test(newPassword) || !/[a-z]/.test(newPassword) || !/\d/.test(newPassword)) {
+    return { success: false, error: 'New password must be at least 8 characters and include uppercase, lowercase, and a number' };
   }
 
   // Generate new secure hash with random salt
@@ -328,6 +328,45 @@ export async function changePassword(userId: string, oldPassword: string, newPas
   // Log password change
   await logAuditEvent('USER_PASSWORD_CHANGED', userId, 'user', userId);
 
+  return { success: true };
+}
+
+// Administrator-only password reset. The plaintext password is never persisted or logged.
+export async function resetUserPassword(
+  targetUserId: string,
+  newPassword: string,
+  actorId: string,
+): Promise<{ success: boolean; error?: string }> {
+  const actor = await getUser(actorId);
+  if (!actor || actor.role_code !== 'admin') {
+    return { success: false, error: 'Only a system administrator can reset passwords' };
+  }
+
+  if (targetUserId === actorId) {
+    return { success: false, error: 'Use Change Password to update your own password' };
+  }
+
+  if (newPassword.length < 8 || !/[A-Z]/.test(newPassword) || !/[a-z]/.test(newPassword) || !/\d/.test(newPassword)) {
+    return { success: false, error: 'Password must be at least 8 characters and include uppercase, lowercase, and a number' };
+  }
+
+  const target = await getUser(targetUserId);
+  if (!target) {
+    return { success: false, error: 'User not found' };
+  }
+
+  const now = new Date().toISOString();
+  await saveUser({
+    ...target,
+    password_hash: await hashPassword(newPassword),
+    failed_login_attempts: 0,
+    locked_until: undefined,
+    updated_at: now,
+    sync_status: 'pending',
+  });
+
+  await logAuditEvent('USER_PASSWORD_RESET', actorId, 'user', targetUserId, `Password reset for ${target.username}`);
+  await logSecurityEvent('USER_PASSWORD_RESET', targetUserId, `Password reset by administrator ${actor.username}`);
   return { success: true };
 }
 
@@ -411,9 +450,7 @@ export async function createUser(
       sync_status: 'pending',
     };
 
-    console.log('[v0] About to save user:', user);
     await saveUser(user);
-    console.log('[v0] User saved successfully');
     await logAuditEvent('USER_CREATED', createdBy, 'user', user.id, `Created user ${username} with role ${roleCode}`);
 
     return { success: true, user };
