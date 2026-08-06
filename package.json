@@ -7,6 +7,10 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
+    "validate:ci": "node scripts/validate.mjs",
+    "health-check": "node scripts/health-check.mjs",
+    "deploy:supabase": "node scripts/deploy.mjs",
+    "rollback": "node scripts/rollback.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.app.json"
   },

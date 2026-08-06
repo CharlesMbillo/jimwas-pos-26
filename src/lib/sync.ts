@@ -190,7 +190,8 @@ const TABLE_CONFIGS: TableSyncConfig[] = [
   { table: 'audit_logs', store: 'audit_logs', orderBy: 'created_at', limit: 500 },
   { table: 'approval_requests', store: 'approval_requests' },
   { table: 'business_settings', store: 'business_settings', single: true },
-  { table: 'mpesa_settings', store: 'mpesa_settings', single: true },
+  { table: 'kcb_settings', store: 'kcb_settings', single: true },
+  { table: 'kcb_payments', store: 'kcb_payments', orderBy: 'created_at', limit: 500 },
   { table: 'payment_methods', store: 'payment_methods' },
   { table: 'loyalty_settings', store: 'loyalty_settings', single: true },
   { table: 'receipt_settings', store: 'receipt_settings', single: true },
@@ -367,7 +368,9 @@ export const syncUpdateLedgerEntry = (entry: unknown) => syncUpdate('ledger_entr
 
 // Settings sync functions
 export const syncUpdateBusinessSettings = (settings: unknown) => syncUpdate('business_settings', settings);
-export const syncUpdateMpesaSettings = (settings: unknown) => syncUpdate('mpesa_settings', settings);
+export const syncUpdateKCBSettings = (settings: unknown) => syncUpdate('kcb_settings', settings);
+// Backward-compatible alias for older callers.
+export const syncUpdateMpesaSettings = syncUpdateKCBSettings;
 export const syncUpdatePaymentMethod = (method: unknown) => syncUpdate('payment_methods', method);
 export const syncUpdateLoyaltySettings = (settings: unknown) => syncUpdate('loyalty_settings', settings);
 export const syncUpdateReceiptSettings = (settings: unknown) => syncUpdate('receipt_settings', settings);

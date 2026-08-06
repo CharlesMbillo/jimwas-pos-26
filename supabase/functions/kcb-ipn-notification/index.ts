@@ -1,125 +1,44 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.39.3";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey, x-kcb-signature",
-};
+const corsHeaders = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "Content-Type, X-KCB-Signature" };
+const ack = (body: unknown = { ResultCode: 0, ResultDesc: 'Success' }) => new Response(JSON.stringify(body), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+const statusFor = (code: unknown) => { const value = String(code ?? ''); if (value === '0' || value === '00000000') return 'success'; if (value === '1032' || value === '17') return 'cancelled'; if (value === '1001' || value === '20') return 'timeout'; if (value === '1' || value === '14') return 'insufficient_balance'; return 'failed'; };
 
 Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") return new Response(null, { status: 200, headers: corsHeaders });
-  if (req.method !== "POST") return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-
+  if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders });
+  if (req.method !== 'POST') return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  const supabase = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
   try {
-    const rawBody = await req.text();
-    const supabase = createClient(Deno.env.get("SUPABASE_URL") ?? "", Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "");
-
-    let body;
-    try { body = JSON.parse(rawBody); } catch {
-      return new Response(JSON.stringify({ error: "Invalid JSON" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-
-    // Handle KCB BUNI IPN format: { Body: { stkCallback: { ... } } }
-    const stkCallback = body?.Body?.stkCallback || body?.stkCallback || body;
-    if (!stkCallback) {
-      console.warn("[kcb-ipn] Missing stkCallback in payload");
-      return new Response(JSON.stringify({ ResultCode: 0, ResultDesc: "Acknowledged" }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-
-    const checkoutRequestId = stkCallback.CheckoutRequestID || stkCallback.checkoutRequestId || stkCallback.checkout_request_id;
-    const merchantRequestId = stkCallback.MerchantRequestID || stkCallback.merchantRequestId || stkCallback.merchant_request_id;
-    const resultCode = stkCallback.ResultCode ?? stkCallback.resultCode;
-    const resultDesc = stkCallback.ResultDesc || stkCallback.resultDesc || '';
-
-    let mpesaReceiptNumber: string | null = null;
+    const raw = await req.text();
+    if (raw.length > 100_000) return ack({ ResultCode: 1, ResultDesc: 'Payload too large' });
+    let body: Record<string, any>;
+    try { body = JSON.parse(raw); } catch { return ack({ ResultCode: 1, ResultDesc: 'Invalid JSON' }); }
+    const callback = body?.Body?.stkCallback || body?.stkCallback || body;
+    const checkout = callback?.CheckoutRequestID || callback?.checkoutRequestId || callback?.checkout_request_id;
+    const merchant = callback?.MerchantRequestID || callback?.merchantRequestId || callback?.merchant_request_id;
+    if (!checkout && !merchant) return ack({ ResultCode: 1, ResultDesc: 'Missing payment reference' });
+    const resultCode = callback?.ResultCode ?? callback?.resultCode;
+    const resultDesc = String(callback?.ResultDesc || callback?.resultDesc || '').slice(0, 500);
+    const status = statusFor(resultCode);
+    let receipt: string | null = null;
     let transactionDate: string | null = null;
-    const metadata = stkCallback.CallbackMetadata?.Item || stkCallback.callbackMetadata?.Item || [];
-    for (const item of metadata) {
-      switch (item.Name) {
-        case 'MpesaReceiptNumber': mpesaReceiptNumber = String(item.Value || ''); break;
-        case 'TransactionDate': transactionDate = String(item.Value || ''); break;
-      }
+    for (const item of callback?.CallbackMetadata?.Item || callback?.callbackMetadata?.Item || []) {
+      if (item?.Name === 'MpesaReceiptNumber') receipt = item.Value ? String(item.Value) : null;
+      if (item?.Name === 'TransactionDate') transactionDate = item.Value ? String(item.Value) : null;
     }
-
-    // Determine payment status
-    let status: string;
-    if (resultCode === 0 || resultCode === '0') status = 'success';
-    else if (resultCode === 1032) status = 'cancelled';
-    else if (resultCode === 1001) status = 'timeout';
-    else if (resultCode === 1 || resultCode === '1') status = 'insufficient_balance';
-    else status = 'failed';
-
-    console.log("[kcb-ipn] IPN received:", { checkoutRequestId, merchantRequestId, resultCode, status });
-
-    // Update kcb_payments
-    const { data: payment, error: paymentError } = await supabase
-      .from('kcb_payments')
-      .update({
-        status,
-        result_code: String(resultCode ?? ''),
-        result_desc: resultDesc,
-        mpesa_receipt_number: mpesaReceiptNumber,
-        transaction_date: transactionDate,
-        callback_received: true,
-        callback_payload: body,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('checkout_request_id', checkoutRequestId)
-      .select()
-      .single();
-
-    if (paymentError) {
-      console.error("[kcb-ipn] Error updating kcb_payments:", paymentError);
-    } else if (payment) {
-      console.log("[kcb-ipn] Payment updated:", payment.id, "→", status);
-
-      // If successful and linked to a transaction, update it
-      if (status === 'success' && payment.transaction_id) {
-        const { error: txError } = await supabase
-          .from('transactions')
-          .update({
-            status: 'completed',
-            payment_reference: mpesaReceiptNumber,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', payment.transaction_id);
-
-        if (txError) console.error("[kcb-ipn] Error updating transaction:", txError);
-      }
-    }
-
-    // Also try mpesa_transactions for backward compatibility
-    await supabase
-      .from('mpesa_transactions')
-      .update({
-        status,
-        result_code: String(resultCode ?? ''),
-        result_desc: resultDesc,
-        mpesa_receipt_number: mpesaReceiptNumber,
-        transaction_date: transactionDate,
-        callback_received: true,
-        callback_payload: body,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('checkout_request_id', checkoutRequestId);
-
-    // Log to audit table if it exists
-    try {
-      await supabase.from('api_audit_logs').insert({
-        event_type: 'IPN_RECEIVED',
-        actor: 'kcb-webhook',
-        resource: merchantRequestId || checkoutRequestId || 'unknown',
-        action: `IPN: payment ${status}`,
-        status: status === 'success' ? 'SUCCESS' : 'FAILED',
-        metadata: { checkoutRequestId, resultCode, status },
-        created_at: new Date().toISOString(),
-      });
-    } catch { /* audit table may not exist */ }
-
-    return new Response(JSON.stringify({ ResultCode: 0, ResultDesc: "Success" }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    let query = supabase.from('kcb_payments').select('id,status').limit(1);
+    query = checkout ? query.eq('checkout_request_id', checkout) : query.eq('merchant_request_id', merchant);
+    const { data: payment } = await query.maybeSingle();
+    if (!payment) return ack({ ResultCode: 1, ResultDesc: 'Payment reference not found' });
+    if (payment.status === 'success') return ack();
+    const update: Record<string, unknown> = { status, result_code: String(resultCode ?? ''), result_desc: resultDesc, mpesa_receipt_number: receipt, transaction_date: transactionDate, callback_received: true, callback_payload: body, updated_at: new Date().toISOString() };
+    if (status === 'success') update.completed_at = new Date().toISOString();
+    const { error } = await supabase.from('kcb_payments').update(update).eq('id', payment.id).neq('status', 'success');
+    if (error) console.error('[kcb-ipn] update failed', { code: error.code, correlation: checkout || merchant });
+    return ack();
   } catch (error) {
-    console.error("[kcb-ipn] Error:", error);
-    return new Response(JSON.stringify({ ResultCode: 0, ResultDesc: "Acknowledged" }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    console.error('[kcb-ipn] callback processing failed', error instanceof Error ? error.message : 'unknown');
+    return ack();
   }
 });

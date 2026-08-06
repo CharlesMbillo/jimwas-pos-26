@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { RoleGuard } from '../context/AuthContext';
-import { Settings, Users, CreditCard, Building, Save, Plus, CreditCard as Edit, Trash2, Eye, EyeOff, Check, X, Smartphone, ToggleLeft, ToggleRight, Shield, RefreshCw, AlertCircle, Clock, Printer, CheckCircle2, Loader2, Cloud, CloudOff, FlaskConical, Zap } from 'lucide-react';
+import { Settings, Users, CreditCard, Building, Save, Plus, CreditCard as Edit, Eye, EyeOff, Check, X, Smartphone, ToggleLeft, ToggleRight, Shield, RefreshCw, AlertCircle, Clock, Printer, CheckCircle2, Loader2, Cloud, CloudOff, FlaskConical, Zap } from 'lucide-react';
 import {
   BusinessSettings,
   KCBSettings,
@@ -28,13 +28,12 @@ import {
   saveReceiptSettings,
   getReceiptSettings,
   getAllUsers,
-  saveUser,
-  getUser,
 } from '../lib/db';
 import { getSupabase } from '../lib/sync';
 import { testPrint } from '../lib/print';
-import { createUser, updateUserRole, updateUserStatus } from '../lib/auth';
-import type { User } from '../lib/security-types';
+import { changePassword, createUser, resetUserPassword, updateUserRole } from '../lib/auth';
+import type { RoleCode, User } from '../lib/security-types';
+import { getKCBCallbackUrl, KCB_FUNCTION_NAMES, maskKCBPhone } from '../lib/modules/payments/kcb';
 
 type SettingsTab = 'general' | 'users' | 'payments' | 'receipt' | 'loyalty';
 
@@ -125,16 +124,19 @@ export function SettingsPage() {
         getAllUsers(),
       ]);
 
-      if (loadedBusiness ?? idbBusiness) setBusinessSettings((loadedBusiness ?? idbBusiness)!);
-      {
-        // Merge loaded settings with defaults to ensure all fields are present
-        const merged = { ...DEFAULT_KCB_SETTINGS, ...(loadedMpesa ?? idbMpesa) };
-        setKCBSettings(merged);
-      }
-      const finalPayments = loadedPayments.length ? loadedPayments : idbPayments;
+      // Pending local edits are authoritative until they successfully sync. This prevents
+      // a reload from replacing newly entered values with stale cloud/default values.
+      const finalBusiness = idbBusiness?.sync_status === 'pending' ? idbBusiness : (loadedBusiness ?? idbBusiness);
+      const finalKCB = idbMpesa?.sync_status === 'pending' ? idbMpesa : (loadedMpesa ?? idbMpesa);
+      const finalLoyalty = idbLoyalty?.sync_status === 'pending' ? idbLoyalty : (loadedLoyalty ?? idbLoyalty);
+      const finalReceipt = idbReceipt?.sync_status === 'pending' ? idbReceipt : (loadedReceipt ?? idbReceipt);
+
+      if (finalBusiness) setBusinessSettings(finalBusiness);
+      setKCBSettings({ ...DEFAULT_KCB_SETTINGS, ...(finalKCB ?? {}) });
+      const finalPayments = idbPayments.length ? idbPayments : loadedPayments;
       if (finalPayments.length > 0) setPaymentMethods(finalPayments);
-      if (loadedLoyalty ?? idbLoyalty) setLoyaltySettings((loadedLoyalty ?? idbLoyalty)!);
-      if (loadedReceipt ?? idbReceipt) setReceiptSettings((loadedReceipt ?? idbReceipt)!);
+      if (finalLoyalty) setLoyaltySettings(finalLoyalty);
+      if (finalReceipt) setReceiptSettings(finalReceipt);
       setUsers(idbUsers);
     } catch (error) {
       console.error('Failed to load settings:', error);
@@ -586,6 +588,49 @@ function UsersTab({
   );
 }
 
+function KCBDiagnostics({ settings }: { settings: KCBSettings }) {
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+  const callbackUrl = getKCBCallbackUrl(supabaseUrl, settings.callback_url);
+  const configured = Boolean(settings.client_id && settings.client_secret && settings.org_shortcode && settings.org_passkey);
+  const online = typeof navigator === 'undefined' || navigator.onLine;
+  const checks = [
+    { label: 'Configuration', state: configured ? 'PASS' : 'WARNING', detail: configured ? 'Required KCB credentials are present.' : 'Complete the required credentials below.' },
+    { label: 'Callback endpoint', state: callbackUrl.includes('kcb-ipn-notification') ? 'PASS' : 'WARNING', detail: callbackUrl },
+    { label: 'External connectivity', state: online ? 'PASS' : 'WARNING', detail: online ? 'Browser is online.' : 'Offline: external KCB tests are disabled.' },
+    { label: 'Edge Function deployment', state: 'WARNING', detail: 'Not verified in this browser. Confirm the deployed function is named kcb-stk-push.' },
+  ];
+  return (
+    <section className="mb-6 rounded-xl border border-slate-700 bg-slate-900/60 p-4" aria-labelledby="kcb-diagnostics-heading">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider text-emerald-400">Administrator console</p>
+          <h2 id="kcb-diagnostics-heading" className="mt-1 text-lg font-semibold text-white">KCB BUNI diagnostics</h2>
+          <p className="mt-1 text-xs text-slate-400">Secrets remain masked. Provider behavior not verified by this browser is shown as a warning.</p>
+        </div>
+        <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${configured && online ? 'bg-emerald-900/40 text-emerald-300' : 'bg-amber-900/40 text-amber-300'}`}>
+          {configured && online ? 'Ready for review' : 'Action required'}
+        </span>
+      </div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {checks.map((check) => (
+          <div key={check.label} className="rounded-lg border border-slate-700 bg-slate-800/70 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-medium text-slate-200">{check.label}</span>
+              <span className={`text-[10px] font-bold ${check.state === 'PASS' ? 'text-emerald-400' : 'text-amber-400'}`}>{check.state}</span>
+            </div>
+            <p className="mt-2 break-words text-[11px] leading-relaxed text-slate-400">{check.detail}</p>
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-[11px] text-slate-400">
+        <span>STK: <code className="text-slate-300">{KCB_FUNCTION_NAMES.stk}</code></span>
+        <span>Callback: <code className="text-slate-300">{KCB_FUNCTION_NAMES.callback}</code></span>
+        <span>Safe phone preview: <code className="text-slate-300">{maskKCBPhone('254700000000')}</code></span>
+      </div>
+    </section>
+  );
+}
+
 // ============ PAYMENTS TAB ============
 function PaymentsTab({
   kcbSettings,
@@ -642,6 +687,10 @@ function PaymentsTab({
           ))}
         </div>
       </div>
+
+      <RoleGuard allowedRoles={['admin']}>
+        <KCBDiagnostics settings={kcbSettings} />
+      </RoleGuard>
 
       {/* KCB MpesaExpressAPI STK Push Settings */}
       <div>
@@ -869,7 +918,7 @@ function PaymentsTab({
               <div className="bg-blue-900/20 border border-blue-800 rounded-lg p-3 text-xs text-blue-300">
                 Configure these in KCB portal for payment status callbacks:
                 <div className="mt-2 font-mono text-blue-400/80 break-all space-y-1">
-                  <div><span className="text-emerald-400">IPN Endpoint:</span> {import.meta.env.VITE_SUPABASE_URL}/functions/v1/kcb-ipn</div>
+                  <div><span className="text-emerald-400">IPN Endpoint:</span> {import.meta.env.VITE_SUPABASE_URL}/functions/v1/kcb-ipn-notification</div>
                   <div><span className="text-slate-500 text-[11px]">KCB will POST payment status here after STK Push</span></div>
                 </div>
               </div>
@@ -1225,12 +1274,68 @@ function UserModal({
     full_name: user?.full_name || '',
     password: '',
     confirm_password: '',
+    reset_password: '',
+    reset_confirm_password: '',
+    current_password: '',
+    new_password: '',
+    new_confirm_password: '',
     role_code: user?.role_code || 'cashier',
   });
   const [saving, setSaving] = useState(false);
+  const [resettingPassword, setResettingPassword] = useState(false);
+  const [changingOwnPassword, setChangingOwnPassword] = useState(false);
+  const [showResetPassword, setShowResetPassword] = useState(false);
+  const [showOwnPassword, setShowOwnPassword] = useState(false);
   const [error, setError] = useState('');
+  const [resetMessage, setResetMessage] = useState('');
+  const [resetError, setResetError] = useState('');
 
   const isEditing = !!user;
+
+  const handleChangeOwnPassword = async () => {
+    setError('');
+    if (!currentUserId) return;
+    if (formData.new_password !== formData.new_confirm_password) {
+      setError('New passwords do not match');
+      return;
+    }
+    if (formData.new_password.length < 8 || !/[A-Z]/.test(formData.new_password) || !/[a-z]/.test(formData.new_password) || !/\d/.test(formData.new_password)) {
+      setError('Use at least 8 characters with uppercase, lowercase, and a number');
+      return;
+    }
+    setChangingOwnPassword(true);
+    const result = await changePassword(currentUserId, formData.current_password, formData.new_password);
+    if (result.success) {
+      setResetMessage('Your password was changed successfully.');
+      setFormData({ ...formData, current_password: '', new_password: '', new_confirm_password: '' });
+    } else {
+      setError(result.error || 'Unable to change password');
+    }
+    setChangingOwnPassword(false);
+  };
+
+  const handleResetPassword = async () => {
+    setResetError('');
+    setResetMessage('');
+    if (!currentUserId || !user) return;
+    if (formData.reset_password !== formData.reset_confirm_password) {
+      setResetError('Passwords do not match');
+      return;
+    }
+    if (formData.reset_password.length < 8 || !/[A-Z]/.test(formData.reset_password) || !/[a-z]/.test(formData.reset_password) || !/\d/.test(formData.reset_password)) {
+      setResetError('Use at least 8 characters with uppercase, lowercase, and a number');
+      return;
+    }
+    setResettingPassword(true);
+    const result = await resetUserPassword(user.id, formData.reset_password, currentUserId);
+    if (result.success) {
+      setResetMessage('Password reset successfully. The user can sign in with the new password.');
+      setFormData({ ...formData, reset_password: '', reset_confirm_password: '' });
+    } else {
+      setResetError(result.error || 'Unable to reset password');
+    }
+    setResettingPassword(false);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1257,7 +1362,6 @@ function UserModal({
           return;
         }
 
-        console.log('[v0] Creating user with:', { username: formData.username, email: formData.email, role: formData.role_code });
         const result = await createUser(
           formData.username,
           formData.email,
@@ -1347,7 +1451,7 @@ function UserModal({
             <label className="block text-sm text-slate-400 mb-2">Role</label>
             <select
               value={formData.role_code}
-              onChange={(e) => setFormData({ ...formData, role_code: e.target.value })}
+              onChange={(e) => setFormData({ ...formData, role_code: e.target.value as RoleCode })}
               className="w-full px-4 py-3 bg-slate-700 text-white rounded-lg border border-slate-600 focus:border-emerald-500 focus:outline-none"
               required
             >
@@ -1356,6 +1460,54 @@ function UserModal({
               <option value="admin">Administrator</option>
             </select>
           </div>
+
+          {isEditing && currentUserId === user?.id && (
+            <div className="mt-6 rounded-lg border border-emerald-700/60 bg-emerald-950/20 p-4">
+              <div className="mb-3">
+                <h4 className="font-semibold text-emerald-200">Change your password</h4>
+                <p className="mt-1 text-xs leading-relaxed text-slate-400">Use this section to replace the default administrator password or update your current password.</p>
+              </div>
+              <div className="flex flex-col gap-3">
+                <div>
+                  <label className="block text-sm text-slate-400 mb-2" htmlFor="current-password">Current password</label>
+                  <input id="current-password" type={showOwnPassword ? 'text' : 'password'} value={formData.current_password} onChange={(e) => setFormData({ ...formData, current_password: e.target.value })} className="w-full px-4 py-3 bg-slate-700 text-white rounded-lg border border-slate-600 focus:border-emerald-500 focus:outline-none" autoComplete="current-password" />
+                </div>
+                <div>
+                  <label className="block text-sm text-slate-400 mb-2" htmlFor="new-password">New password</label>
+                  <input id="new-password" type={showOwnPassword ? 'text' : 'password'} value={formData.new_password} onChange={(e) => setFormData({ ...formData, new_password: e.target.value })} className="w-full px-4 py-3 pr-12 bg-slate-700 text-white rounded-lg border border-slate-600 focus:border-emerald-500 focus:outline-none" autoComplete="new-password" />
+                  <button type="button" aria-label={showOwnPassword ? 'Hide password fields' : 'Show password fields'} onClick={() => setShowOwnPassword(!showOwnPassword)} className="relative float-right -mt-10 mr-3 text-slate-400 hover:text-white">{showOwnPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button>
+                </div>
+                <div>
+                  <label className="block text-sm text-slate-400 mb-2" htmlFor="new-confirm-password">Confirm new password</label>
+                  <input id="new-confirm-password" type={showOwnPassword ? 'text' : 'password'} value={formData.new_confirm_password} onChange={(e) => setFormData({ ...formData, new_confirm_password: e.target.value })} className="w-full px-4 py-3 bg-slate-700 text-white rounded-lg border border-slate-600 focus:border-emerald-500 focus:outline-none" autoComplete="new-password" />
+                </div>
+                <button type="button" onClick={handleChangeOwnPassword} disabled={changingOwnPassword} className="w-full rounded-lg bg-emerald-600 px-4 py-3 font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-50">{changingOwnPassword ? 'Changing password...' : 'Change Password'}</button>
+              </div>
+            </div>
+          )}
+
+          {isEditing && currentUserId && currentUserId !== user?.id && (
+            <div className="mt-6 rounded-lg border border-amber-700/60 bg-amber-950/20 p-4">
+              <div className="mb-3">
+                <h4 className="font-semibold text-amber-200">Administrator password reset</h4>
+                <p className="mt-1 text-xs leading-relaxed text-slate-400">Set a new password for this user. Their lockout is cleared and the password is never shown or stored in plaintext.</p>
+              </div>
+              {resetError && <div className="mb-3 rounded-lg border border-red-700 bg-red-900/40 p-3 text-sm text-red-200">{resetError}</div>}
+              {resetMessage && <div className="mb-3 rounded-lg border border-emerald-700 bg-emerald-900/40 p-3 text-sm text-emerald-200">{resetMessage}</div>}
+              <div className="flex flex-col gap-3">
+                <div className="relative">
+                  <label className="block text-sm text-slate-400 mb-2" htmlFor="reset-password">New password</label>
+                  <input id="reset-password" type={showResetPassword ? 'text' : 'password'} value={formData.reset_password} onChange={(e) => setFormData({ ...formData, reset_password: e.target.value })} className="w-full px-4 py-3 pr-12 bg-slate-700 text-white rounded-lg border border-slate-600 focus:border-amber-500 focus:outline-none" autoComplete="new-password" />
+                  <button type="button" aria-label={showResetPassword ? 'Hide new password' : 'Show new password'} onClick={() => setShowResetPassword(!showResetPassword)} className="absolute right-3 top-9 text-slate-400 hover:text-white">{showResetPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button>
+                </div>
+                <div>
+                  <label className="block text-sm text-slate-400 mb-2" htmlFor="reset-confirm-password">Confirm new password</label>
+                  <input id="reset-confirm-password" type={showResetPassword ? 'text' : 'password'} value={formData.reset_confirm_password} onChange={(e) => setFormData({ ...formData, reset_confirm_password: e.target.value })} className="w-full px-4 py-3 bg-slate-700 text-white rounded-lg border border-slate-600 focus:border-amber-500 focus:outline-none" autoComplete="new-password" />
+                </div>
+                <button type="button" onClick={handleResetPassword} disabled={resettingPassword} className="w-full rounded-lg bg-amber-600 px-4 py-3 font-semibold text-white transition hover:bg-amber-700 disabled:opacity-50">{resettingPassword ? 'Resetting password...' : 'Reset Password'}</button>
+              </div>
+            </div>
+          )}
 
           {!isEditing && (
             <>
