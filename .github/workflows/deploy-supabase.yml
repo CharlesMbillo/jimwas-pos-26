@@ -1,0 +1,59 @@
+name: Deploy Supabase and Vercel
+on:
+  push:
+    branches: [main, develop]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Deployment target
+        required: true
+        default: sandbox
+        type: choice
+        options: [sandbox, production]
+permissions:
+  contents: read
+env:
+  NODE_VERSION: 20
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref_name == 'main' || inputs.target == 'production' && 'production' || 'sandbox' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - run: npm ci
+      - run: npm run lint && npm run typecheck && npm run build
+      - run: node scripts/validate.mjs
+      - uses: supabase/setup-cli@v1
+        with: { version: latest }
+      - name: Verify deployment secrets
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          test -n "$SUPABASE_ACCESS_TOKEN" && test -n "$SUPABASE_PROJECT_REF"
+          test -n "$VERCEL_TOKEN" && test -n "$VERCEL_ORG_ID" && test -n "$VERCEL_PROJECT_ID"
+      - name: Deploy Supabase
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: node scripts/deploy.mjs
+      - name: Deploy frontend to Vercel
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          npm install --global vercel@latest
+          vercel pull --yes --environment=${{ github.ref_name == 'main' && 'production' || 'preview' }} --token="$VERCEL_TOKEN"
+          vercel build --token="$VERCEL_TOKEN"
+          if [ "${{ github.ref_name }}" = "main" ]; then vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"; else vercel deploy --prebuilt --token="$VERCEL_TOKEN"; fi
+      - name: Health check
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          KCB_BUNI_CALLBACK_URL: ${{ secrets.KCB_BUNI_CALLBACK_URL }}
+        run: node scripts/health-check.mjs

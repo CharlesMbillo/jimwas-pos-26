@@ -33,10 +33,12 @@ async function hashPassword(password: string, existingHash?: string): Promise<st
     encoder.encode(password),
     { name: 'PBKDF2' },
     false,
-    ['deriveKey']
+    ['deriveBits']
   );
 
-  const derivedKey = await crypto.subtle.deriveKey(
+  // deriveBits returns the hash bytes directly, avoiding extractability restrictions
+  // that apply when a PBKDF2-derived CryptoKey is exported.
+  const derivedBits = await crypto.subtle.deriveBits(
     {
       name: 'PBKDF2',
       salt: salt.slice().buffer as ArrayBuffer,
@@ -44,14 +46,9 @@ async function hashPassword(password: string, existingHash?: string): Promise<st
       hash: 'SHA-256',
     },
     keyMaterial,
-    { name: 'AES-GCM', length: 256 },
-    true,
-    ['encrypt']
+    256
   );
-
-  // Export the derived key to get the deterministic PBKDF2 hash bytes.
-  const exportedKey = await crypto.subtle.exportKey('raw', derivedKey);
-  const hashArray = Array.from(new Uint8Array(exportedKey));
+  const hashArray = Array.from(new Uint8Array(derivedBits));
   const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
   const saltHex = Array.from(salt).map(b => b.toString(16).padStart(2, '0')).join('');
 

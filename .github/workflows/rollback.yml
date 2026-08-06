@@ -1,0 +1,44 @@
+name: Rollback
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Existing release tag to redeploy
+        required: true
+        type: string
+      environment:
+        description: Protected deployment environment
+        required: true
+        default: sandbox
+        type: choice
+        options: [sandbox, production]
+permissions:
+  contents: read
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: ${{ inputs.ref }}, fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - run: npm ci
+      - run: node scripts/rollback.mjs
+        env: { ROLLBACK_REF: ${{ inputs.ref }} }
+      - uses: supabase/setup-cli@v1
+        with: { version: latest }
+      - run: node scripts/deploy.mjs
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      - name: Rollback frontend
+        env: { VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }} }
+        run: |
+          npm install --global vercel@latest
+          vercel rollback --token="$VERCEL_TOKEN"
+      - name: Verify health
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          KCB_BUNI_CALLBACK_URL: ${{ secrets.KCB_BUNI_CALLBACK_URL }}
+        run: node scripts/health-check.mjs
