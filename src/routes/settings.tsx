@@ -35,6 +35,7 @@ import { getSupabase } from '../lib/sync';
 import { testPrint } from '../lib/print';
 import { createUser, updateUserRole, updateUserStatus } from '../lib/auth';
 import type { User } from '../lib/security-types';
+import { getKCBCallbackUrl, KCB_FUNCTION_NAMES, maskKCBPhone } from '../lib/modules/payments/kcb';
 
 type SettingsTab = 'general' | 'users' | 'payments' | 'receipt' | 'loyalty';
 
@@ -586,6 +587,49 @@ function UsersTab({
   );
 }
 
+function KCBDiagnostics({ settings }: { settings: KCBSettings }) {
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+  const callbackUrl = getKCBCallbackUrl(supabaseUrl, settings.callback_url);
+  const configured = Boolean(settings.client_id && settings.client_secret && settings.org_shortcode && settings.org_passkey);
+  const online = typeof navigator === 'undefined' || navigator.onLine;
+  const checks = [
+    { label: 'Configuration', state: configured ? 'PASS' : 'WARNING', detail: configured ? 'Required KCB credentials are present.' : 'Complete the required credentials below.' },
+    { label: 'Callback endpoint', state: callbackUrl.includes('kcb-ipn-notification') ? 'PASS' : 'WARNING', detail: callbackUrl },
+    { label: 'External connectivity', state: online ? 'PASS' : 'WARNING', detail: online ? 'Browser is online.' : 'Offline: external KCB tests are disabled.' },
+    { label: 'Edge Function deployment', state: 'WARNING', detail: 'Not verified in this browser. Confirm the deployed function is named kcb-stk-push.' },
+  ];
+  return (
+    <section className="mb-6 rounded-xl border border-slate-700 bg-slate-900/60 p-4" aria-labelledby="kcb-diagnostics-heading">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider text-emerald-400">Administrator console</p>
+          <h2 id="kcb-diagnostics-heading" className="mt-1 text-lg font-semibold text-white">KCB BUNI diagnostics</h2>
+          <p className="mt-1 text-xs text-slate-400">Secrets remain masked. Provider behavior not verified by this browser is shown as a warning.</p>
+        </div>
+        <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${configured && online ? 'bg-emerald-900/40 text-emerald-300' : 'bg-amber-900/40 text-amber-300'}`}>
+          {configured && online ? 'Ready for review' : 'Action required'}
+        </span>
+      </div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {checks.map((check) => (
+          <div key={check.label} className="rounded-lg border border-slate-700 bg-slate-800/70 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-medium text-slate-200">{check.label}</span>
+              <span className={`text-[10px] font-bold ${check.state === 'PASS' ? 'text-emerald-400' : 'text-amber-400'}`}>{check.state}</span>
+            </div>
+            <p className="mt-2 break-words text-[11px] leading-relaxed text-slate-400">{check.detail}</p>
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-[11px] text-slate-400">
+        <span>STK: <code className="text-slate-300">{KCB_FUNCTION_NAMES.stk}</code></span>
+        <span>Callback: <code className="text-slate-300">{KCB_FUNCTION_NAMES.callback}</code></span>
+        <span>Safe phone preview: <code className="text-slate-300">{maskKCBPhone('254700000000')}</code></span>
+      </div>
+    </section>
+  );
+}
+
 // ============ PAYMENTS TAB ============
 function PaymentsTab({
   kcbSettings,
@@ -642,6 +686,10 @@ function PaymentsTab({
           ))}
         </div>
       </div>
+
+      <RoleGuard allowedRoles={['admin']}>
+        <KCBDiagnostics settings={kcbSettings} />
+      </RoleGuard>
 
       {/* KCB MpesaExpressAPI STK Push Settings */}
       <div>
@@ -869,7 +917,7 @@ function PaymentsTab({
               <div className="bg-blue-900/20 border border-blue-800 rounded-lg p-3 text-xs text-blue-300">
                 Configure these in KCB portal for payment status callbacks:
                 <div className="mt-2 font-mono text-blue-400/80 break-all space-y-1">
-                  <div><span className="text-emerald-400">IPN Endpoint:</span> {import.meta.env.VITE_SUPABASE_URL}/functions/v1/kcb-ipn</div>
+                  <div><span className="text-emerald-400">IPN Endpoint:</span> {import.meta.env.VITE_SUPABASE_URL}/functions/v1/kcb-ipn-notification</div>
                   <div><span className="text-slate-500 text-[11px]">KCB will POST payment status here after STK Push</span></div>
                 </div>
               </div>

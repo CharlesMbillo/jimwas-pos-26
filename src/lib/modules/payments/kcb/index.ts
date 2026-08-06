@@ -46,6 +46,18 @@ export { Logger, createLogger } from './logger';
 // Errors
 export { KCBError, getErrorMessage, isRetryableError, isCustomerError, parseHTTPError, stringifyError } from './errors';
 
+// Contract and safety helpers
+export {
+  KCB_FUNCTION_NAMES,
+  getKCBCallbackUrl,
+  normalizeKenyanPhone,
+  isValidKCBAmount,
+  mapKCBResultCode,
+  isTerminalKCBStatus,
+  maskKCBPhone,
+  redactKCBText,
+} from './contract';
+
 // Utilities
 export {
   generateMessageId,
