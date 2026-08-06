@@ -1127,34 +1127,62 @@ export async function getRefundRequestsByStatus(status: string): Promise<RefundR
 
 // ============ SETTINGS STORE OPERATIONS ============
 
+// Settings writes are local-first. A failed cloud write remains pending and is queued
+// for retry, so the values entered by the user are never discarded or replaced by defaults.
+async function persistSetting<T extends { id: string; sync_status: 'pending' | 'synced' }>(
+  store: string,
+  table: string,
+  settings: T,
+  payload: Record<string, unknown>,
+): Promise<T> {
+  const db = await getDB();
+  const pending = { ...settings, sync_status: 'pending' as const } as T;
+  await db.put(store as any, pending as any);
+
+  try {
+    const { getSupabase, queueForSync } = await import('./sync');
+    const supabase = getSupabase();
+    if (!supabase) {
+      queueForSync(table, 'update', payload);
+      return pending;
+    }
+
+    const { error } = await supabase.from(table).upsert(payload);
+    if (error) throw new Error(error.message);
+
+    const synced = { ...pending, sync_status: 'synced' as const } as T;
+      await db.put(store as any, synced as any);
+    return synced;
+  } catch (error) {
+    console.warn(`[v0] Settings cloud sync pending for ${table}:`, error instanceof Error ? error.message : String(error));
+    try {
+      const { queueForSync } = await import('./sync');
+      queueForSync(table, 'update', payload);
+    } catch (queueError) {
+      console.warn(`[v0] Could not queue ${table} settings sync:`, queueError);
+    }
+    return pending;
+  }
+}
+
 // Business settings operations
 export async function saveBusinessSettings(settings: BusinessSettings): Promise<BusinessSettings> {
-  const db = await getDB();
-  await db.put('business_settings', settings);
-  const { getSupabase } = await import('./sync');
-  const supabase = getSupabase();
-  if (supabase) {
-    const { error } = await supabase.from('business_settings').upsert({
-      id: settings.id,
-      business_name: settings.business_name,
-      business_phone: settings.business_phone || null,
-      business_email: settings.business_email || null,
-      business_address: settings.business_address || null,
-      tax_id: settings.tax_id || null,
-      currency: settings.currency,
-      currency_symbol: settings.currency_symbol,
-      receipt_header: settings.receipt_header || null,
-      receipt_footer: settings.receipt_footer || null,
-      show_tax_on_receipt: settings.show_tax_on_receipt,
-      logo_url: settings.logo_url || null,
-      created_at: settings.created_at,
-      updated_at: settings.updated_at,
-    });
-    if (error) throw new Error(error.message);
-  }
-  const synced = { ...settings, sync_status: 'synced' as const };
-  await db.put('business_settings', synced);
-  return synced;
+  return persistSetting('business_settings', 'business_settings', settings, {
+    id: settings.id,
+    business_name: settings.business_name,
+    business_phone: settings.business_phone || null,
+    business_email: settings.business_email || null,
+    business_address: settings.business_address || null,
+    tax_id: settings.tax_id || null,
+    currency: settings.currency,
+    currency_symbol: settings.currency_symbol,
+    receipt_header: settings.receipt_header || null,
+    receipt_footer: settings.receipt_footer || null,
+    show_tax_on_receipt: settings.show_tax_on_receipt,
+    logo_url: settings.logo_url || null,
+    created_at: settings.created_at,
+    updated_at: settings.updated_at,
+  });
 }
 
 export async function getBusinessSettings(): Promise<BusinessSettings | undefined> {
@@ -1164,64 +1192,29 @@ export async function getBusinessSettings(): Promise<BusinessSettings | undefine
 
 // KCB settings operations
 export async function saveKCBSettings(settings: KCBSettings): Promise<KCBSettings> {
-  try {
-    const db = await getDB();
-    
-    // Ensure the settings object has required fields
-    const safeSettings: KCBSettings = {
-      ...settings,
-      id: settings.id || 'kcb-settings',
-      sync_status: 'pending' as const,
-    };
+  const safeSettings: KCBSettings = {
+    ...settings,
+    id: settings.id || 'kcb-settings',
+    sync_status: 'pending',
+  };
 
-    try {
-      // Write to IDB optimistically
-      await db.put('kcb_settings', safeSettings);
-    } catch (idbError) {
-      console.warn('[v0] IndexedDB write warning for KCB settings:', idbError instanceof Error ? idbError.message : String(idbError));
-      // Continue to try Supabase sync even if IDB fails
-    }
-
-    // Direct upsert to Supabase — do not go through sync queue for settings
-    const { getSupabase } = await import('./sync');
-    const supabase = getSupabase();
-    if (supabase) {
-      try {
-        const { error } = await supabase.from('kcb_settings').upsert({
-          id: safeSettings.id,
-          is_enabled: safeSettings.is_enabled,
-          environment: safeSettings.environment,
-          client_id: safeSettings.client_id || null,
-          client_secret: safeSettings.client_secret || null,
-          org_shortcode: safeSettings.org_shortcode || null,
-          org_passkey: safeSettings.org_passkey || null,
-          callback_url: safeSettings.callback_url || null,
-          timeout_url: safeSettings.timeout_url || null,
-          public_cert_path: safeSettings.public_cert_path || null,
-          default_phone_country_code: safeSettings.default_phone_country_code,
-          last_updated: safeSettings.last_updated,
-          last_updated_by: safeSettings.last_updated_by || null,
-          created_at: safeSettings.created_at,
-          updated_at: safeSettings.updated_at,
-        });
-        if (error) console.warn('[v0] Supabase sync warning for KCB settings:', error.message);
-      } catch (supabaseError) {
-        console.warn('[v0] Supabase sync error (non-critical):', supabaseError instanceof Error ? supabaseError.message : String(supabaseError));
-      }
-    }
-
-    try {
-      const synced = { ...safeSettings, sync_status: 'synced' as const };
-      await db.put('kcb_settings', synced);
-      return synced;
-    } catch (finalIdbError) {
-      console.warn('[v0] Final IndexedDB write failed, returning unsaved settings');
-      return safeSettings;
-    }
-  } catch (error) {
-    console.error('[v0] Critical error in saveKCBSettings:', error);
-    throw error;
-  }
+  return persistSetting('kcb_settings', 'kcb_settings', safeSettings, {
+    id: safeSettings.id,
+    is_enabled: safeSettings.is_enabled,
+    environment: safeSettings.environment,
+    client_id: safeSettings.client_id || null,
+    client_secret: safeSettings.client_secret || null,
+    org_shortcode: safeSettings.org_shortcode || null,
+    org_passkey: safeSettings.org_passkey || null,
+    callback_url: safeSettings.callback_url || null,
+    timeout_url: safeSettings.timeout_url || null,
+    public_cert_path: safeSettings.public_cert_path || null,
+    default_phone_country_code: safeSettings.default_phone_country_code,
+    last_updated: safeSettings.last_updated,
+    last_updated_by: safeSettings.last_updated_by || null,
+    created_at: safeSettings.created_at,
+    updated_at: safeSettings.updated_at,
+  });
 }
 
 export async function getKCBSettings(): Promise<KCBSettings | undefined> {
@@ -1384,23 +1377,36 @@ export async function getKCBStatistics(sinceDate?: Date): Promise<KCBStatistics>
 }
 
 // Payment method operations
-export async function savePaymentMethod(method: PaymentMethodConfig) {
+export async function savePaymentMethod(method: PaymentMethodConfig): Promise<PaymentMethodConfig> {
   const db = await getDB();
   await db.put('payment_methods', method);
-  const { getSupabase } = await import('./sync');
-  const supabase = getSupabase();
-  if (supabase) {
-    const { error } = await supabase.from('payment_methods').upsert({
-      id: method.id,
-      method_name: method.method_name,
-      is_enabled: method.is_enabled,
-      display_name: method.display_name,
-      requires_reference: method.requires_reference,
-      display_order: method.display_order,
-      created_at: method.created_at,
-      updated_at: method.updated_at,
-    });
+  const payload = {
+    id: method.id,
+    method_name: method.method_name,
+    is_enabled: method.is_enabled,
+    display_name: method.display_name,
+    requires_reference: method.requires_reference,
+    display_order: method.display_order,
+    created_at: method.created_at,
+    updated_at: method.updated_at,
+  };
+
+  try {
+    const { getSupabase } = await import('./sync');
+    const supabase = getSupabase();
+    if (!supabase) {
+      const { queueForSync } = await import('./sync');
+      queueForSync('payment_methods', 'update', payload);
+      return method;
+    }
+    const { error } = await supabase.from('payment_methods').upsert(payload);
     if (error) throw new Error(error.message);
+    return method;
+  } catch (error) {
+    console.warn('[v0] Payment method cloud sync pending:', error instanceof Error ? error.message : String(error));
+    const { queueForSync } = await import('./sync');
+    queueForSync('payment_methods', 'update', payload);
+    return method;
   }
 }
 
@@ -1416,26 +1422,16 @@ export async function getAllPaymentMethods(): Promise<PaymentMethodConfig[]> {
 
 // Loyalty settings operations
 export async function saveLoyaltySettings(settings: LoyaltySettings): Promise<LoyaltySettings> {
-  const db = await getDB();
-  await db.put('loyalty_settings', settings);
-  const { getSupabase } = await import('./sync');
-  const supabase = getSupabase();
-  if (supabase) {
-    const { error } = await supabase.from('loyalty_settings').upsert({
-      id: settings.id,
-      is_enabled: settings.is_enabled,
-      points_per_currency: settings.points_per_currency,
-      point_value: settings.point_value,
-      minimum_points_to_redeem: settings.minimum_points_to_redeem,
-      signup_bonus_points: settings.signup_bonus_points,
-      created_at: settings.created_at,
-      updated_at: settings.updated_at,
-    });
-    if (error) throw new Error(error.message);
-  }
-  const synced = { ...settings, sync_status: 'synced' as const };
-  await db.put('loyalty_settings', synced);
-  return synced;
+  return persistSetting('loyalty_settings', 'loyalty_settings', settings, {
+    id: settings.id,
+    is_enabled: settings.is_enabled,
+    points_per_currency: settings.points_per_currency,
+    point_value: settings.point_value,
+    minimum_points_to_redeem: settings.minimum_points_to_redeem,
+    signup_bonus_points: settings.signup_bonus_points,
+    created_at: settings.created_at,
+    updated_at: settings.updated_at,
+  });
 }
 
 export async function getLoyaltySettings(): Promise<LoyaltySettings | undefined> {
@@ -1445,31 +1441,21 @@ export async function getLoyaltySettings(): Promise<LoyaltySettings | undefined>
 
 // Receipt settings operations
 export async function saveReceiptSettings(settings: ReceiptSettings): Promise<ReceiptSettings> {
-  const db = await getDB();
-  await db.put('receipt_settings', settings);
-  const { getSupabase } = await import('./sync');
-  const supabase = getSupabase();
-  if (supabase) {
-    const { error } = await supabase.from('receipt_settings').upsert({
-      id: settings.id,
-      show_customer_name: settings.show_customer_name,
-      show_customer_phone: settings.show_customer_phone,
-      show_item_barcode: settings.show_item_barcode,
-      show_item_sku: settings.show_item_sku,
-      show_cashier_name: settings.show_cashier_name,
-      show_branch_name: settings.show_branch_name,
-      show_tax_breakdown: settings.show_tax_breakdown,
-      print_copy_for_customer: settings.print_copy_for_customer,
-      print_copy_for_merchant: settings.print_copy_for_merchant,
-      paper_width: settings.paper_width,
-      created_at: settings.created_at,
-      updated_at: settings.updated_at,
-    });
-    if (error) throw new Error(error.message);
-  }
-  const synced = { ...settings, sync_status: 'synced' as const };
-  await db.put('receipt_settings', synced);
-  return synced;
+  return persistSetting('receipt_settings', 'receipt_settings', settings, {
+    id: settings.id,
+    show_customer_name: settings.show_customer_name,
+    show_customer_phone: settings.show_customer_phone,
+    show_item_barcode: settings.show_item_barcode,
+    show_item_sku: settings.show_item_sku,
+    show_cashier_name: settings.show_cashier_name,
+    show_branch_name: settings.show_branch_name,
+    show_tax_breakdown: settings.show_tax_breakdown,
+    print_copy_for_customer: settings.print_copy_for_customer,
+    print_copy_for_merchant: settings.print_copy_for_merchant,
+    paper_width: settings.paper_width,
+    created_at: settings.created_at,
+    updated_at: settings.updated_at,
+  });
 }
 
 export async function getReceiptSettings(): Promise<ReceiptSettings | undefined> {

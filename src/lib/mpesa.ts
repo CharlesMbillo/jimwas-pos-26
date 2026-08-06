@@ -50,6 +50,8 @@ export async function initiateKCBSTKPush(
   amount: number,
   options?: {
     transactionId?: string;
+    checkoutRequestId?: string;
+    merchantRequestId?: string;
     customerId?: string;
     cashierId?: string;
     cashierName?: string;
@@ -237,7 +239,7 @@ export async function createKCBPaymentRecord(
     merchantRequestId?: string;
   }
 ): Promise<KCBPaymentRecord> {
-  const { saveMpesaPayment } = await import('./db');
+  const { saveKCBPayment } = await import('./db');
   
   const payment: KCBPaymentRecord = {
     id: `mpesa_${generateId()}`,
@@ -253,7 +255,7 @@ export async function createKCBPaymentRecord(
     sync_status: 'pending',
   };
   
-  await saveMpesaPayment(payment);
+  await saveKCBPayment(payment);
   return payment;
 }
 
@@ -263,9 +265,9 @@ export async function recordMpesaInitiation(
   checkoutRequestId: string,
   merchantRequestId: string
 ) {
-  const { updateMpesaPaymentStatus } = await import('./db');
+  const { updateKCBPaymentStatus } = await import('./db');
   
-  await updateMpesaPaymentStatus(paymentId, 'processing', {
+  await updateKCBPaymentStatus(paymentId, 'processing', {
     checkout_request_id: checkoutRequestId,
     merchant_request_id: merchantRequestId,
     attempts: 1,
@@ -278,9 +280,9 @@ export async function recordMpesaSuccess(
   mpesaReceiptNumber: string,
   resultDesc: string
 ) {
-  const { updateMpesaPaymentStatus } = await import('./db');
+  const { updateKCBPaymentStatus } = await import('./db');
   
-  await updateMpesaPaymentStatus(paymentId, 'success', {
+  await updateKCBPaymentStatus(paymentId, 'success', {
     mpesa_receipt_number: mpesaReceiptNumber,
     result_desc: resultDesc,
     completed_at: new Date().toISOString(),
@@ -293,10 +295,10 @@ export async function recordMpesaFailure(
   status: 'failed' | 'cancelled' | 'timeout' | 'insufficient_balance',
   errorMessage: string
 ) {
-  const { getMpesaPayment, updateMpesaPaymentStatus } = await import('./db');
-  const payment = await getMpesaPayment(paymentId);
+const { getKCBPayment, updateKCBPaymentStatus } = await import('./db');
   
-  await updateMpesaPaymentStatus(paymentId, status, {
+  const payment = await getKCBPayment(paymentId);
+  await updateKCBPaymentStatus(paymentId, status, {
     error_message: errorMessage,
     attempts: (payment?.attempts || 0) + 1,
   });

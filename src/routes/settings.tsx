@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { RoleGuard } from '../context/AuthContext';
-import { Settings, Users, CreditCard, Building, Save, Plus, CreditCard as Edit, Trash2, Eye, EyeOff, Check, X, Smartphone, ToggleLeft, ToggleRight, Shield, RefreshCw, AlertCircle, Clock, Printer, CheckCircle2, Loader2, Cloud, CloudOff, FlaskConical, Zap } from 'lucide-react';
+import { Settings, Users, CreditCard, Building, Save, Plus, CreditCard as Edit, Eye, EyeOff, Check, X, Smartphone, ToggleLeft, ToggleRight, Shield, RefreshCw, AlertCircle, Clock, Printer, CheckCircle2, Loader2, Cloud, CloudOff, FlaskConical, Zap } from 'lucide-react';
 import {
   BusinessSettings,
   KCBSettings,
@@ -28,12 +28,10 @@ import {
   saveReceiptSettings,
   getReceiptSettings,
   getAllUsers,
-  saveUser,
-  getUser,
 } from '../lib/db';
 import { getSupabase } from '../lib/sync';
 import { testPrint } from '../lib/print';
-import { changePassword, createUser, resetUserPassword, updateUserRole, updateUserStatus } from '../lib/auth';
+import { changePassword, createUser, resetUserPassword, updateUserRole } from '../lib/auth';
 import type { RoleCode, User } from '../lib/security-types';
 import { getKCBCallbackUrl, KCB_FUNCTION_NAMES, maskKCBPhone } from '../lib/modules/payments/kcb';
 
@@ -126,16 +124,19 @@ export function SettingsPage() {
         getAllUsers(),
       ]);
 
-      if (loadedBusiness ?? idbBusiness) setBusinessSettings((loadedBusiness ?? idbBusiness)!);
-      {
-        // Merge loaded settings with defaults to ensure all fields are present
-        const merged = { ...DEFAULT_KCB_SETTINGS, ...(loadedMpesa ?? idbMpesa) };
-        setKCBSettings(merged);
-      }
-      const finalPayments = loadedPayments.length ? loadedPayments : idbPayments;
+      // Pending local edits are authoritative until they successfully sync. This prevents
+      // a reload from replacing newly entered values with stale cloud/default values.
+      const finalBusiness = idbBusiness?.sync_status === 'pending' ? idbBusiness : (loadedBusiness ?? idbBusiness);
+      const finalKCB = idbMpesa?.sync_status === 'pending' ? idbMpesa : (loadedMpesa ?? idbMpesa);
+      const finalLoyalty = idbLoyalty?.sync_status === 'pending' ? idbLoyalty : (loadedLoyalty ?? idbLoyalty);
+      const finalReceipt = idbReceipt?.sync_status === 'pending' ? idbReceipt : (loadedReceipt ?? idbReceipt);
+
+      if (finalBusiness) setBusinessSettings(finalBusiness);
+      setKCBSettings({ ...DEFAULT_KCB_SETTINGS, ...(finalKCB ?? {}) });
+      const finalPayments = idbPayments.length ? idbPayments : loadedPayments;
       if (finalPayments.length > 0) setPaymentMethods(finalPayments);
-      if (loadedLoyalty ?? idbLoyalty) setLoyaltySettings((loadedLoyalty ?? idbLoyalty)!);
-      if (loadedReceipt ?? idbReceipt) setReceiptSettings((loadedReceipt ?? idbReceipt)!);
+      if (finalLoyalty) setLoyaltySettings(finalLoyalty);
+      if (finalReceipt) setReceiptSettings(finalReceipt);
       setUsers(idbUsers);
     } catch (error) {
       console.error('Failed to load settings:', error);
