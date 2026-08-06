@@ -8,6 +8,13 @@ export default defineConfig({
     exclude: ['lucide-react'],
   },
   server: {
+    host: '0.0.0.0',
+    // v0 previews terminate TLS and proxy the Vite websocket on the public host.
+    // Keep the client on the preview origin instead of advertising the VM address.
+    hmr: {
+      protocol: 'wss',
+      clientPort: 443,
+    },
     allowedHosts: [
       'localhost',
       '127.0.0.1',
