@@ -23,7 +23,7 @@ function formatPhoneNumber(phone: string): string {
   return cleaned;
 }
 
-export function POSTerminal() {
+const POSTerminal = () => {
   const { user } = useAuth();
   const toast = useToast();
   const [products, setProducts] = useState<Product[]>([]);
@@ -1469,4 +1469,6 @@ export function POSTerminal() {
       )}
     </div>
   );
-}
+};
+
+export { POSTerminal };
