@@ -558,7 +558,7 @@ const POSTerminal = () => {
       }
       
       clearCart();
-      loadData();
+      await loadData();
       toast.show('Transaction completed successfully!');
     }
   }, [cart, cartTotal, products, selectedCustomer, paymentMethod, amountPaid, change, user?.id, toast]);

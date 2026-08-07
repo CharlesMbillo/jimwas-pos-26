@@ -1,8 +1,11 @@
-import { generateId, saveProduct, saveTransaction, saveLoyaltyTransaction, saveStockMovement, saveCustomer } from './db';
+import { generateId, getProduct, saveProduct, saveTransaction, saveLoyaltyTransaction, saveStockMovement, saveCustomer } from './db';
 import { syncInsertTransaction, syncUpdateProduct, syncInsertStockMovement, syncUpdateCustomer, syncInsertLoyaltyTransaction } from './sync';
 import type { Product, Customer, CartItem, SaleType } from './types';
 
 const LOYALTY_POINTS_PER_SHILLING = 100;
+
+// Serialize sale writes so rapid checkouts cannot calculate stock from the same stale snapshot.
+let saleWriteQueue: Promise<void> = Promise.resolve();
 
 export interface CompleteSaleParams {
   cart: CartItem[];
@@ -39,6 +42,12 @@ export async function completeSale({
   depositAmount = 0,
   balanceAmount = 0,
 }: CompleteSaleParams): Promise<CompleteSaleResult> {
+  const previousSale = saleWriteQueue;
+  let releaseSale!: () => void;
+  saleWriteQueue = new Promise<void>((resolve) => { releaseSale = resolve; });
+  await previousSale;
+
+  try {
   const now = new Date().toISOString();
 
   // Build transaction items
@@ -70,13 +79,13 @@ export async function completeSale({
 
   // Save transaction locally and queue for sync
   await saveTransaction(transaction);
-  syncInsertTransaction(transaction, items);
+  await syncInsertTransaction(transaction, items);
 
   // Supplier-fulfilled dropship orders do not deduct local stock until supplier confirmation.
   if (saleType !== 'dropshipping') {
   // Update product stock and create stock movements
   for (const item of cart) {
-    const product = products.find(p => p.id === item.product_id);
+    const product = await getProduct(item.product_id) || products.find(p => p.id === item.product_id);
     if (product) {
       const newStock = Math.max(0, product.stock - item.quantity);
       const updated = {
@@ -86,7 +95,7 @@ export async function completeSale({
         sync_status: 'pending' as const,
       };
       await saveProduct(updated);
-      syncUpdateProduct(updated);
+      await syncUpdateProduct(updated);
 
       const noteSuffix = mpesaReceipt ? ` - MPESA:${mpesaReceipt}` : '';
       const movement = {
@@ -103,7 +112,7 @@ export async function completeSale({
         sync_status: 'pending' as const,
       };
       await saveStockMovement(movement);
-      syncInsertStockMovement(movement);
+      await syncInsertStockMovement(movement);
     }
   }
   }
@@ -136,6 +145,9 @@ export async function completeSale({
   }
 
   return { success: true, transactionId: transaction.id };
+  } finally {
+    releaseSale();
+  }
 }
 
 // Validation helpers
