@@ -25,6 +25,14 @@ export function ProtectedRoute({ routePath, children, fallback }: ProtectedRoute
         return;
       }
 
+      // Admin bypasses permission checks and can access newly registered protected modules.
+      // Other roles must still pass the explicit route matrix below.
+      if (user.role_code === 'admin') {
+        setHasAccess(true);
+        setIsChecking(false);
+        return;
+      }
+
       // Check role-based access
       const roleAccess = canAccessRoute(user.role_code, routePath);
       if (!roleAccess) {
@@ -33,8 +41,7 @@ export function ProtectedRoute({ routePath, children, fallback }: ProtectedRoute
         return;
       }
 
-      // Admin bypasses permission checks — full access to all allowed routes
-      if (user.role_code === 'admin') {
+      // Non-admin roles must also satisfy the route permission checks.
         setHasAccess(true);
         setIsChecking(false);
         return;

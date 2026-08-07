@@ -1,5 +1,5 @@
 import { ReactNode, useState, useRef, useEffect } from 'react';
-import { ShoppingCart, Users, Package, CreditCard, BarChart3, Wifi, WifiOff, RefreshCw, Warehouse, Shield, LogOut, User, ChevronDown, Settings, FileText, DollarSign, Archive, Menu, X, Smartphone, Database, AlertCircle } from 'lucide-react';
+import { ShoppingCart, Users, Package, CreditCard, BarChart3, Wifi, WifiOff, RefreshCw, Warehouse, Shield, LogOut, User, ChevronDown, Settings, FileText, DollarSign, Archive, Menu, X, Smartphone, Database, AlertCircle, ClipboardCheck, Truck, WalletCards } from 'lucide-react';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { useKeyboardScroll } from '../hooks/useKeyboardScroll';
 import { syncNow, getSyncState, subscribeToSyncState, type SyncState } from '../lib/sync';
@@ -46,6 +46,10 @@ export function Layout({ children, currentPage, onNavigate, user }: LayoutProps)
     { id: 'transactions', label: 'Transactions', icon: DollarSign },
     { id: 'security', label: 'Security', icon: Shield },
     { id: 'audit', label: 'Audit Trail', icon: FileText },
+    { id: 'reports', label: 'Reports', icon: BarChart3 },
+    { id: 'reconciliation', label: 'Reconciliation', icon: ClipboardCheck },
+    { id: 'outbound-deliveries', label: 'Deliveries', icon: Truck },
+    { id: 'shifts', label: 'Shifts / X-Y-Z', icon: WalletCards },
   ] : [];
 
   // Manager/Admin approval items

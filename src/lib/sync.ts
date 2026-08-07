@@ -197,6 +197,11 @@ const TABLE_CONFIGS: TableSyncConfig[] = [
   { table: 'receipt_settings', store: 'receipt_settings', single: true },
   { table: 'ledger_entries', store: 'ledger_entries', orderBy: 'date', limit: 1000 },
   { table: 'expense_categories', store: 'expense_categories' },
+  { table: 'shifts', store: 'shifts', orderBy: 'opened_at', limit: 500 },
+  { table: 'reconciliations', store: 'reconciliations', orderBy: 'created_at', limit: 1000 },
+  { table: 'outbound_deliveries', store: 'outbound_deliveries', orderBy: 'updated_at', limit: 1000 },
+  { table: 'offers', store: 'offers' },
+  { table: 'supplier_fulfillments', store: 'supplier_fulfillments', orderBy: 'created_at', limit: 1000 },
 ];
 
 async function syncTableFromRemote(client: SupabaseClient, db: Awaited<ReturnType<typeof getDB>>, config: TableSyncConfig) {
@@ -365,6 +370,16 @@ export const syncUpdateDelivery = (delivery: unknown) => syncUpdate('deliveries'
 export const syncInsertDeliveryItem = (item: unknown) => syncInsert('delivery_items', item);
 export const syncInsertLedgerEntry = (entry: unknown) => syncInsert('ledger_entries', entry);
 export const syncUpdateLedgerEntry = (entry: unknown) => syncUpdate('ledger_entries', entry);
+export const syncInsertShift = (shift: unknown) => syncInsert('shifts', shift);
+export const syncUpdateShift = (shift: unknown) => syncUpdate('shifts', shift);
+export const syncInsertReconciliation = (record: unknown) => syncInsert('reconciliations', record);
+export const syncUpdateReconciliation = (record: unknown) => syncUpdate('reconciliations', record);
+export const syncInsertOutboundDelivery = (delivery: unknown) => syncInsert('outbound_deliveries', delivery);
+export const syncUpdateOutboundDelivery = (delivery: unknown) => syncUpdate('outbound_deliveries', delivery);
+export const syncInsertOffer = (offer: unknown) => syncInsert('offers', offer);
+export const syncUpdateOffer = (offer: unknown) => syncUpdate('offers', offer);
+export const syncInsertSupplierFulfillment = (record: unknown) => syncInsert('supplier_fulfillments', record);
+export const syncUpdateSupplierFulfillment = (record: unknown) => syncUpdate('supplier_fulfillments', record);
 
 // Settings sync functions
 export const syncUpdateBusinessSettings = (settings: unknown) => syncUpdate('business_settings', settings);

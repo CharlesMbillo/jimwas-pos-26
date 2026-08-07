@@ -169,3 +169,107 @@ export interface StockAdjustment {
   sync_status: 'pending' | 'synced';
   local_id?: string;
 }
+
+export type EnterpriseSyncStatus = 'pending' | 'synced' | 'error';
+export type SaleType = 'standard' | 'retail' | 'wholesale' | 'dropshipping' | 'lipa_mdogo' | 'kyama' | 'group_sale';
+
+export interface ReportFilters {
+  from: string;
+  to: string;
+  branch_id?: string;
+  cashier_id?: string;
+  shift_id?: string;
+  terminal_id?: string;
+  sale_type?: SaleType;
+  payment_method?: string;
+  customer_id?: string;
+}
+
+export interface ShiftRecord {
+  id: string;
+  cashier_id: string;
+  branch_id?: string;
+  terminal_id?: string;
+  opened_at: string;
+  closed_at?: string;
+  opening_float: number;
+  cash_count?: number;
+  cash_sales: number;
+  card_sales: number;
+  mobile_money_sales: number;
+  bank_sales: number;
+  credit_sales: number;
+  refunds: number;
+  discounts: number;
+  tax: number;
+  gross_sales: number;
+  net_sales: number;
+  variance?: number;
+  status: 'open' | 'closed' | 'archived';
+  x_report_at?: string;
+  y_report_at?: string;
+  z_report_at?: string;
+  sync_status: EnterpriseSyncStatus;
+}
+
+export interface ReconciliationRecord {
+  id: string;
+  payment_method: string;
+  reference?: string;
+  transaction_id?: string;
+  customer_id?: string;
+  expected_amount: number;
+  received_amount: number;
+  status: 'matched' | 'pending' | 'partial' | 'failed' | 'duplicate' | 'exception' | 'reversed';
+  matched_at?: string;
+  notes?: string;
+  created_at: string;
+  sync_status: EnterpriseSyncStatus;
+}
+
+export type OutboundDeliveryStatus = 'pending' | 'packed' | 'assigned' | 'dispatched' | 'in_transit' | 'delivered' | 'closed' | 'returned';
+
+export interface OutboundDelivery {
+  id: string;
+  transaction_id: string;
+  customer_id?: string;
+  status: OutboundDeliveryStatus;
+  address?: string;
+  courier?: string;
+  driver?: string;
+  vehicle?: string;
+  eta?: string;
+  cod_amount?: number;
+  cod_status?: 'pending' | 'collected' | 'failed' | 'not_applicable';
+  proof_type?: 'signature' | 'photo' | 'otp' | 'qr';
+  proof_reference?: string;
+  created_at: string;
+  updated_at: string;
+  sync_status: EnterpriseSyncStatus;
+}
+
+export interface OfferRule {
+  id: string;
+  name: string;
+  type: 'percentage' | 'fixed' | 'bogo' | 'bundle' | 'multi_buy' | 'coupon' | 'loyalty' | 'staff' | 'senior';
+  value: number;
+  priority: number;
+  starts_at?: string;
+  ends_at?: string;
+  product_ids?: string[];
+  customer_group?: string;
+  stackable: boolean;
+  is_active: boolean;
+  sync_status: EnterpriseSyncStatus;
+}
+
+export interface SupplierFulfillment {
+  id: string;
+  transaction_id: string;
+  supplier_id: string;
+  status: 'pending' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled';
+  supplier_reference?: string;
+  margin?: number;
+  created_at: string;
+  sync_status: EnterpriseSyncStatus;
+}

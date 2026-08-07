@@ -19,7 +19,14 @@ import type {
   LoyaltySettings,
   ReceiptSettings,
 } from './settings-types';
-import type { CartItem } from './types';
+import type {
+  CartItem,
+  ShiftRecord,
+  ReconciliationRecord,
+  OutboundDelivery,
+  OfferRule,
+  SupplierFulfillment,
+} from './types';
 
 interface POSDatabase extends DBSchema {
   customers: {
@@ -218,6 +225,11 @@ interface POSDatabase extends DBSchema {
       created_at: string;
     };
   };
+  shifts: { key: string; value: ShiftRecord; indexes: { 'by-status': string; 'by-cashier': string } };
+  reconciliations: { key: string; value: ReconciliationRecord; indexes: { 'by-status': string; 'by-method': string } };
+  outbound_deliveries: { key: string; value: OutboundDelivery; indexes: { 'by-status': string; 'by-transaction': string } };
+  offers: { key: string; value: OfferRule; indexes: { 'by-active': string } };
+  supplier_fulfillments: { key: string; value: SupplierFulfillment; indexes: { 'by-transaction': string; 'by-status': string } };
   // Security stores
   users: {
     key: string;
@@ -403,7 +415,7 @@ export interface TransactionItem {
 }
 
 const DB_NAME = 'pos-offline-db';
-const DB_VERSION = 5;
+const DB_VERSION = 6;
 
 let dbInstance: IDBPDatabase<POSDatabase> | null = null;
 
@@ -488,6 +500,31 @@ export async function getDB(): Promise<IDBPDatabase<POSDatabase>> {
       // Sync queue store
       if (!db.objectStoreNames.contains('sync_queue')) {
         db.createObjectStore('sync_queue', { keyPath: 'id' });
+      }
+
+      if (!db.objectStoreNames.contains('shifts')) {
+        const store = db.createObjectStore('shifts', { keyPath: 'id' });
+        store.createIndex('by-status', 'status');
+        store.createIndex('by-cashier', 'cashier_id');
+      }
+      if (!db.objectStoreNames.contains('reconciliations')) {
+        const store = db.createObjectStore('reconciliations', { keyPath: 'id' });
+        store.createIndex('by-status', 'status');
+        store.createIndex('by-method', 'payment_method');
+      }
+      if (!db.objectStoreNames.contains('outbound_deliveries')) {
+        const store = db.createObjectStore('outbound_deliveries', { keyPath: 'id' });
+        store.createIndex('by-status', 'status');
+        store.createIndex('by-transaction', 'transaction_id');
+      }
+      if (!db.objectStoreNames.contains('offers')) {
+        const store = db.createObjectStore('offers', { keyPath: 'id' });
+        store.createIndex('by-active', 'is_active');
+      }
+      if (!db.objectStoreNames.contains('supplier_fulfillments')) {
+        const store = db.createObjectStore('supplier_fulfillments', { keyPath: 'id' });
+        store.createIndex('by-transaction', 'transaction_id');
+        store.createIndex('by-status', 'status');
       }
 
       // Security stores

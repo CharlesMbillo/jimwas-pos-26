@@ -75,6 +75,32 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
     description: 'Executive Dashboard',
   },
 
+  // Enterprise operations
+  'reports': {
+    path: '/reports',
+    allowedRoles: ['admin', 'manager', 'cashier'],
+    permissions: ['reports.view'],
+    description: 'Sales, inventory, financial, delivery, user, and X-Y-Z reports',
+  },
+  'reconciliation': {
+    path: '/reconciliation',
+    allowedRoles: ['admin', 'manager'],
+    permissions: ['finance.view'],
+    description: 'Payment reconciliation center',
+  },
+  'outbound-deliveries': {
+    path: '/outbound-deliveries',
+    allowedRoles: ['admin', 'manager', 'cashier'],
+    permissions: ['sales.view'],
+    description: 'Outbound customer delivery tracking',
+  },
+  'shifts': {
+    path: '/shifts',
+    allowedRoles: ['admin', 'manager', 'cashier'],
+    permissions: ['sales.view'],
+    description: 'Shift opening, X-Y-Z reports, and closeout',
+  },
+
   // Transactions
   'transactions': {
     path: '/transactions',

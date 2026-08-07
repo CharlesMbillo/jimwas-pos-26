@@ -15,9 +15,10 @@ import { TransactionsPage } from './routes/transactions';
 import { BackupPage } from './routes/backup';
 import { PopulateDBPage } from './routes/populate-db';
 import { VoidRequestsPage } from './routes/void-requests';
+import { EnterpriseOperationsPage } from './routes/enterprise';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './components/Toast';
-import { initNetworkListeners, syncNow } from './lib/sync';
+import { initNetworkListeners } from './lib/sync';
 
 function AppContent() {
   const [currentPage, setCurrentPage] = useState('pos');
@@ -94,6 +95,14 @@ function AppContent() {
         return <ProtectedRoute routePath="/populate-db" fallback={accessDenied}><PopulateDBPage /></ProtectedRoute>;
       case 'void-requests':
         return <ProtectedRoute routePath="/void-requests" fallback={accessDenied}><VoidRequestsPage /></ProtectedRoute>;
+      case 'reports':
+        return <ProtectedRoute routePath="/reports" fallback={accessDenied}><EnterpriseOperationsPage section="reports" /></ProtectedRoute>;
+      case 'reconciliation':
+        return <ProtectedRoute routePath="/reconciliation" fallback={accessDenied}><EnterpriseOperationsPage section="reconciliation" /></ProtectedRoute>;
+      case 'outbound-deliveries':
+        return <ProtectedRoute routePath="/outbound-deliveries" fallback={accessDenied}><EnterpriseOperationsPage section="deliveries" /></ProtectedRoute>;
+      case 'shifts':
+        return <ProtectedRoute routePath="/shifts" fallback={accessDenied}><EnterpriseOperationsPage section="shifts" /></ProtectedRoute>;
       default:
         return <ProtectedRoute routePath="/pos" fallback={accessDenied}><POSTerminal /></ProtectedRoute>;
     }
