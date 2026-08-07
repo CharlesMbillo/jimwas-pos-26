@@ -202,6 +202,8 @@ const TABLE_CONFIGS: TableSyncConfig[] = [
   { table: 'outbound_deliveries', store: 'outbound_deliveries', orderBy: 'updated_at', limit: 1000 },
   { table: 'offers', store: 'offers' },
   { table: 'supplier_fulfillments', store: 'supplier_fulfillments', orderBy: 'created_at', limit: 1000 },
+  { table: 'report_schedules', store: 'report_schedules', orderBy: 'next_run_at', limit: 500 },
+  { table: 'safe_drops', store: 'safe_drops', orderBy: 'created_at', limit: 500 },
 ];
 
 async function syncTableFromRemote(client: SupabaseClient, db: Awaited<ReturnType<typeof getDB>>, config: TableSyncConfig) {
@@ -380,6 +382,9 @@ export const syncInsertOffer = (offer: unknown) => syncInsert('offers', offer);
 export const syncUpdateOffer = (offer: unknown) => syncUpdate('offers', offer);
 export const syncInsertSupplierFulfillment = (record: unknown) => syncInsert('supplier_fulfillments', record);
 export const syncUpdateSupplierFulfillment = (record: unknown) => syncUpdate('supplier_fulfillments', record);
+export const syncInsertReportSchedule = (record: unknown) => syncInsert('report_schedules', record);
+export const syncUpdateReportSchedule = (record: unknown) => syncUpdate('report_schedules', record);
+export const syncInsertSafeDrop = (record: unknown) => syncInsert('safe_drops', record);
 
 // Settings sync functions
 export const syncUpdateBusinessSettings = (settings: unknown) => syncUpdate('business_settings', settings);

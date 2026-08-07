@@ -270,6 +270,31 @@ export interface SupplierFulfillment {
   status: 'pending' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled';
   supplier_reference?: string;
   margin?: number;
+  customer_tracking?: string;
+  shipping_provider?: string;
+  created_at: string;
+  sync_status: EnterpriseSyncStatus;
+}
+
+export interface ReportSchedule {
+  id: string;
+  name: string;
+  report_type: 'executive' | 'sales' | 'inventory' | 'financial' | 'delivery' | 'customer' | 'user' | 'x' | 'y' | 'z';
+  frequency: 'daily' | 'weekly' | 'monthly';
+  recipients: string[];
+  filters: ReportFilters;
+  next_run_at: string;
+  is_active: boolean;
+  created_at: string;
+  sync_status: EnterpriseSyncStatus;
+}
+
+export interface SafeDropRecord {
+  id: string;
+  shift_id: string;
+  amount: number;
+  reason: string;
+  approved_by?: string;
   created_at: string;
   sync_status: EnterpriseSyncStatus;
 }

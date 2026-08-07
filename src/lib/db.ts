@@ -26,6 +26,8 @@ import type {
   OutboundDelivery,
   OfferRule,
   SupplierFulfillment,
+  ReportSchedule,
+  SafeDropRecord,
 } from './types';
 
 interface POSDatabase extends DBSchema {
@@ -230,6 +232,8 @@ interface POSDatabase extends DBSchema {
   outbound_deliveries: { key: string; value: OutboundDelivery; indexes: { 'by-status': string; 'by-transaction': string } };
   offers: { key: string; value: OfferRule; indexes: { 'by-active': string } };
   supplier_fulfillments: { key: string; value: SupplierFulfillment; indexes: { 'by-transaction': string; 'by-status': string } };
+  report_schedules: { key: string; value: ReportSchedule; indexes: { 'by-active': string; 'by-next-run': string } };
+  safe_drops: { key: string; value: SafeDropRecord; indexes: { 'by-shift': string } };
   // Security stores
   users: {
     key: string;
@@ -415,7 +419,7 @@ export interface TransactionItem {
 }
 
 const DB_NAME = 'pos-offline-db';
-const DB_VERSION = 6;
+const DB_VERSION = 7;
 
 let dbInstance: IDBPDatabase<POSDatabase> | null = null;
 
@@ -525,6 +529,15 @@ export async function getDB(): Promise<IDBPDatabase<POSDatabase>> {
         const store = db.createObjectStore('supplier_fulfillments', { keyPath: 'id' });
         store.createIndex('by-transaction', 'transaction_id');
         store.createIndex('by-status', 'status');
+      }
+      if (!db.objectStoreNames.contains('report_schedules')) {
+        const store = db.createObjectStore('report_schedules', { keyPath: 'id' });
+        store.createIndex('by-active', 'is_active');
+        store.createIndex('by-next-run', 'next_run_at');
+      }
+      if (!db.objectStoreNames.contains('safe_drops')) {
+        const store = db.createObjectStore('safe_drops', { keyPath: 'id' });
+        store.createIndex('by-shift', 'shift_id');
       }
 
       // Security stores
