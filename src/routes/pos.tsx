@@ -7,7 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/Toast';
 import { initiateKCBSTKPush, pollForKCBPaymentCompletion } from '../lib/mpesa';
 import { completeSale, validatePhoneNumber, validatePrice, validateStock, sanitizeInput } from '../lib/transaction-utils';
-import { printReceipt, saveReceiptToHistory, getReceiptHistory, previewReceipt } from '../lib/print';
+import { printReceipt, saveReceiptToHistory, getReceiptHistory } from '../lib/print';
 import { useDebounce } from '../hooks/useDebounce';
 import { SaleTypeSelector } from '../components/SaleTypeSelector';
 import type { Product, Customer, CartItem, SaleType } from '../lib/types';
@@ -45,7 +45,6 @@ export function POSTerminal() {
   // KCB BUNI STK Push state
   const [kcbPhone, setKCBPhone] = useState('');
   const [kcbStatus, setKCBStatus] = useState<'idle' | 'initiating' | 'waiting' | 'checking' | 'success' | 'failed' | 'cancelled'>('idle');
-  const [kcbCheckoutId, setKCBCheckoutId] = useState<string | null>(null);
   const [kcbError, setKCBError] = useState<string | null>(null);
   const [kcbReceiptNumber, setKCBReceiptNumber] = useState<string | null>(null);
   const [kcbStartTime, setKCBStartTime] = useState<Date | null>(null);
@@ -251,7 +250,7 @@ export function POSTerminal() {
     // Reset KCB BUNI STK state
     setKCBPhone('');
     setKCBStatus('idle');
-    setKCBCheckoutId(null);
+
     setKCBError(null);
     setKCBReceiptNumber(null);
     setKCBStartTime(null);
@@ -300,7 +299,6 @@ export function POSTerminal() {
         return;
       }
 
-      setKCBCheckoutId(result.checkoutRequestId);
       setKCBStatus('waiting');
       toast.show('KCB BUNI STK Push request sent. Check your phone for the prompt.');
 
@@ -472,13 +470,15 @@ export function POSTerminal() {
   const handleCheckout = useCallback(async () => {
     if (cart.length === 0) return;
 
-    // Stock validation
-    for (const item of cart) {
+    // Dropshipping is supplier-fulfilled, so local stock is not reserved at checkout.
+    if (saleType !== 'dropshipping') {
+      for (const item of cart) {
       const product = products.find(p => p.id === item.product_id);
       if (!product) continue;
       if (product.stock < item.quantity) {
         toast.show(`Insufficient stock for ${item.product_name}. Available: ${product.stock}`, 'error');
         return;
+      }
       }
     }
 

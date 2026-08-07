@@ -50,6 +50,16 @@ export function SaleTypeSelector({
       descColor: 'text-slate-400',
     },
     {
+      id: 'group_sale',
+      label: 'Group Sale',
+      icon: ShoppingCart,
+      description: 'Shared order with group pricing and allocation',
+      color: 'bg-slate-700 border-slate-600 hover:bg-slate-600',
+      activeColor: 'bg-indigo-600/20 border-indigo-500',
+      textColor: 'text-white',
+      descColor: 'text-slate-400',
+    },
+    {
       id: 'lipa_mdogo',
       label: 'Lipa Mdogo-Mdogo',
       icon: Percent,
@@ -83,7 +93,7 @@ export function SaleTypeSelector({
           return (
             <button
               key={type.id}
-              onClick={() => onSaleTypeChange(type.id as any)}
+              onClick={() => onSaleTypeChange(type.id as SaleType)}
               className={`p-3 rounded-lg border-2 transition text-left ${
                 isActive ? type.activeColor : type.color
               }`}

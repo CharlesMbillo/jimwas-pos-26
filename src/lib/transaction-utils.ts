@@ -72,6 +72,8 @@ export async function completeSale({
   await saveTransaction(transaction);
   syncInsertTransaction(transaction, items);
 
+  // Supplier-fulfilled dropship orders do not deduct local stock until supplier confirmation.
+  if (saleType !== 'dropshipping') {
   // Update product stock and create stock movements
   for (const item of cart) {
     const product = products.find(p => p.id === item.product_id);
@@ -103,6 +105,7 @@ export async function completeSale({
       await saveStockMovement(movement);
       syncInsertStockMovement(movement);
     }
+  }
   }
 
   // Update customer loyalty if applicable
