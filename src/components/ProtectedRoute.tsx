@@ -42,11 +42,6 @@ export function ProtectedRoute({ routePath, children, fallback }: ProtectedRoute
       }
 
       // Non-admin roles must also satisfy the route permission checks.
-        setHasAccess(true);
-        setIsChecking(false);
-        return;
-      }
-
       // Check permission-based access
       const routeConfig = getRouteConfig(routePath);
       if (routeConfig?.permissions && routeConfig.permissions.length > 0) {

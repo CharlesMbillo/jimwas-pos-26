@@ -1,5 +1,5 @@
 import { ReactNode, useState, useRef, useEffect } from 'react';
-import { ShoppingCart, Users, Package, CreditCard, BarChart3, Wifi, WifiOff, RefreshCw, Warehouse, Shield, LogOut, User, ChevronDown, Settings, FileText, DollarSign, Archive, Menu, X, Smartphone, Database, AlertCircle, ClipboardCheck, Truck, WalletCards } from 'lucide-react';
+import { ShoppingCart, Users, Package, CreditCard, BarChart3, Wifi, WifiOff, RefreshCw, Warehouse, Shield, LogOut, User, ChevronDown, Settings, FileText, DollarSign, Archive, Menu, X, Database, AlertCircle, ClipboardCheck, Truck, WalletCards } from 'lucide-react';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { useKeyboardScroll } from '../hooks/useKeyboardScroll';
 import { syncNow, getSyncState, subscribeToSyncState, type SyncState } from '../lib/sync';
