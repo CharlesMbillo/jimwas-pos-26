@@ -100,6 +100,12 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
     permissions: ['sales.view'],
     description: 'Shift opening, X-Y-Z reports, and closeout',
   },
+  'offers': {
+    path: '/offers',
+    allowedRoles: ['admin', 'manager'],
+    permissions: ['price.change'],
+    description: 'Promotion and offer rule management',
+  },
 
   // Transactions
   'transactions': {

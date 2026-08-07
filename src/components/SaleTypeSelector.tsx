@@ -1,8 +1,9 @@
 import { ShoppingCart, Truck, Percent, Wallet } from 'lucide-react';
+import type { SaleType } from '../lib/types';
 
 interface SaleTypeSelectorProps {
-  saleType: 'standard' | 'wholesale' | 'lipa_mdogo' | 'kyama';
-  onSaleTypeChange: (type: 'standard' | 'wholesale' | 'lipa_mdogo' | 'kyama') => void;
+  saleType: SaleType;
+  onSaleTypeChange: (type: SaleType) => void;
   cartTotal: number;
   depositAmount: number;
   onDepositChange: (amount: number) => void;
@@ -30,11 +31,21 @@ export function SaleTypeSelector({
     },
     {
       id: 'wholesale',
-      label: 'Wholesale/Drop-shipping',
+      label: 'Wholesale',
       icon: Truck,
-      description: 'Bulk orders with wholesale pricing',
+      description: 'Bulk orders with tier pricing and MOQ',
       color: 'bg-slate-700 border-slate-600 hover:bg-slate-600',
       activeColor: 'bg-blue-600/20 border-blue-500',
+      textColor: 'text-white',
+      descColor: 'text-slate-400',
+    },
+    {
+      id: 'dropshipping',
+      label: 'Dropshipping',
+      icon: Truck,
+      description: 'Supplier-fulfilled order with tracking',
+      color: 'bg-slate-700 border-slate-600 hover:bg-slate-600',
+      activeColor: 'bg-cyan-600/20 border-cyan-500',
       textColor: 'text-white',
       descColor: 'text-slate-400',
     },

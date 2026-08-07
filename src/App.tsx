@@ -103,6 +103,8 @@ function AppContent() {
         return <ProtectedRoute routePath="/outbound-deliveries" fallback={accessDenied}><EnterpriseOperationsPage section="deliveries" /></ProtectedRoute>;
       case 'shifts':
         return <ProtectedRoute routePath="/shifts" fallback={accessDenied}><EnterpriseOperationsPage section="shifts" /></ProtectedRoute>;
+      case 'offers':
+        return <ProtectedRoute routePath="/offers" fallback={accessDenied}><EnterpriseOperationsPage section="offers" /></ProtectedRoute>;
       default:
         return <ProtectedRoute routePath="/pos" fallback={accessDenied}><POSTerminal /></ProtectedRoute>;
     }

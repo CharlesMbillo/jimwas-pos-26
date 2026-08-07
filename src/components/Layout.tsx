@@ -1,5 +1,5 @@
 import { ReactNode, useState, useRef, useEffect } from 'react';
-import { ShoppingCart, Users, Package, CreditCard, BarChart3, Wifi, WifiOff, RefreshCw, Warehouse, Shield, LogOut, User, ChevronDown, Settings, FileText, DollarSign, Archive, Menu, X, Database, AlertCircle, ClipboardCheck, Truck, WalletCards } from 'lucide-react';
+import { ShoppingCart, Users, Package, CreditCard, BarChart3, Wifi, WifiOff, RefreshCw, Warehouse, Shield, LogOut, User, ChevronDown, Settings, FileText, DollarSign, Archive, Menu, X, Database, AlertCircle, ClipboardCheck, Truck, WalletCards, Tag } from 'lucide-react';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { useKeyboardScroll } from '../hooks/useKeyboardScroll';
 import { syncNow, getSyncState, subscribeToSyncState, type SyncState } from '../lib/sync';
@@ -55,6 +55,7 @@ export function Layout({ children, currentPage, onNavigate, user }: LayoutProps)
   // Manager/Admin approval items
   const approvalItems = user && (user.role_code === 'admin' || user.role_code === 'manager') ? [
     { id: 'void-requests', label: 'Void Approvals', icon: AlertCircle },
+    { id: 'offers', label: 'Offers', icon: Tag },
   ] : [];
 
   // Admin only navigation items

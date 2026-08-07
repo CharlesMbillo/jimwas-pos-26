@@ -1,6 +1,6 @@
 import { generateId, saveProduct, saveTransaction, saveLoyaltyTransaction, saveStockMovement, saveCustomer } from './db';
 import { syncInsertTransaction, syncUpdateProduct, syncInsertStockMovement, syncUpdateCustomer, syncInsertLoyaltyTransaction } from './sync';
-import type { Product, Customer, CartItem } from './types';
+import type { Product, Customer, CartItem, SaleType } from './types';
 
 const LOYALTY_POINTS_PER_SHILLING = 100;
 
@@ -14,7 +14,7 @@ export interface CompleteSaleParams {
   change: number;
   userId: string;
   mpesaReceipt?: string;
-  saleType?: 'standard' | 'wholesale' | 'lipa_mdogo' | 'kyama';
+  saleType?: SaleType;
   depositAmount?: number;
   balanceAmount?: number;
 }

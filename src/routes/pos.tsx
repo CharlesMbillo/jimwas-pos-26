@@ -10,7 +10,7 @@ import { completeSale, validatePhoneNumber, validatePrice, validateStock, saniti
 import { printReceipt, saveReceiptToHistory, getReceiptHistory, previewReceipt } from '../lib/print';
 import { useDebounce } from '../hooks/useDebounce';
 import { SaleTypeSelector } from '../components/SaleTypeSelector';
-import type { Product, Customer, CartItem } from '../lib/types';
+import type { Product, Customer, CartItem, SaleType } from '../lib/types';
 
 const LOYALTY_POINTS_PER_SHILLING = 100;
 
@@ -56,7 +56,7 @@ export function POSTerminal() {
 
   
   // Sale type state
-  const [saleType, setSaleType] = useState<'standard' | 'wholesale' | 'lipa_mdogo' | 'kyama'>('standard');
+  const [saleType, setSaleType] = useState<SaleType>('standard');
   const [depositAmount, setDepositAmount] = useState(0);
 
   // Receipt printing state
