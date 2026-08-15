@@ -1,6 +1,6 @@
 // Auth Context - Provide authentication state to React components
 
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import type { User } from '../lib/security-types';
 import { getCurrentUser, login as authLogin, logout as authLogout, initializeSecurity } from '../lib/auth';
 import { clearAllPermissionCache } from '../lib/permissions';
@@ -20,8 +20,12 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const initializedRef = useRef(false);
 
   useEffect(() => {
+    if (initializedRef.current) return;
+    initializedRef.current = true;
+
     async function init() {
       try {
         // Initialize app (default settings, etc.)
