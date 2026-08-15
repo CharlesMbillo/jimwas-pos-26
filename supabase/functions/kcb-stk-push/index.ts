@@ -49,11 +49,18 @@ Deno.serve(async (req: Request) => {
   const correlationId = req.headers.get('x-correlation-id') || crypto.randomUUID();
 
   try {
+    const authorization = req.headers.get('authorization');
+    if (!authorization?.startsWith('Bearer ')) return json({ error: 'Authentication required' }, 401);
+    const callerClient = createClient(supabaseUrl, Deno.env.get('SUPABASE_ANON_KEY') ?? '');
+    const { data: { user: caller } } = await callerClient.auth.getUser(authorization.slice(7));
+    if (!caller) return json({ error: 'Authentication required' }, 401);
+
     const body = await req.json() as STKPushRequest;
     const phone = normalizePhone(body.phone);
     const amount = Number(body.amount);
     if (!phone) return json({ error: 'Invalid Kenyan phone number' }, 400);
     if (!Number.isFinite(amount) || amount <= 0 || Math.round(amount * 100) !== amount * 100 || amount > 999999.99) return json({ error: 'Amount must be a positive KES value with at most two decimals' }, 400);
+    if (body.cashierId && body.cashierId !== caller.id) return json({ error: 'Cashier identity mismatch' }, 403);
 
     const { data: settings } = await supabase.from('kcb_settings').select('*').eq('id', 'kcb-settings').maybeSingle();
     if (!settings?.is_enabled) return json({ error: 'KCB is disabled or not configured' }, 400);

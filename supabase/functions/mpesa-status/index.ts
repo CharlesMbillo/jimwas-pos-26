@@ -12,7 +12,13 @@ Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
   try {
-    const supabase = createClient(Deno.env.get("SUPABASE_URL") ?? "", Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "");
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+    const supabase = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "");
+    const authorization = req.headers.get('authorization');
+    if (!authorization?.startsWith('Bearer ')) return new Response(JSON.stringify({ error: 'Authentication required' }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    const callerClient = createClient(supabaseUrl, Deno.env.get('SUPABASE_ANON_KEY') ?? '');
+    const { data: { user: caller } } = await callerClient.auth.getUser(authorization.slice(7));
+    if (!caller) return new Response(JSON.stringify({ error: 'Authentication required' }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     const { checkoutRequestId } = await req.json();
 
     if (!checkoutRequestId) {
