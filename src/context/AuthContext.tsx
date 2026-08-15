@@ -16,6 +16,7 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+let authInitializationPromise: Promise<User | null> | null = null;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -26,8 +27,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (initializedRef.current) return;
     initializedRef.current = true;
 
-    async function init() {
-      try {
+    if (!authInitializationPromise) {
+      authInitializationPromise = (async () => {
         // Initialize app (default settings, etc.)
         await initializeApp();
 
@@ -35,25 +36,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const needsRestore = await shouldAutoRestore();
         if (needsRestore) {
           console.log('[v0] Auto-restoring backup data from previous session...');
-          // Note: Actual restore logic happens in backup module on-demand
-          // This is just a signal that data should be available from IndexedDB
         }
 
         // Initialize security data (roles, permissions, admin user)
         await initializeSecurity();
-
-        // Get current session
-        const currentUser = await getCurrentUser();
-        setUser(currentUser);
-      } catch (error) {
-        console.error('Auth init error:', error);
-        // Ensure the app still renders even if IndexedDB/Supabase init fails
-      } finally {
-        setIsLoading(false);
-      }
+        return getCurrentUser();
+      })();
     }
 
-    init();
+    authInitializationPromise
+      .then(setUser)
+      .catch((error) => {
+        console.error('[v0] Auth initialization failed:', error);
+      })
+      .finally(() => setIsLoading(false));
   }, []);
 
   const login = async (username: string, password: string) => {
