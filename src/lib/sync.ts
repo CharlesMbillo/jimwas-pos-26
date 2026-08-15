@@ -32,6 +32,7 @@ let syncState: SyncState = {
 };
 
 const syncListeners: Set<(state: SyncState) => void> = new Set();
+let networkListenersInitialized = false;
 
 export function subscribeToSyncState(listener: (state: SyncState) => void): () => void {
   syncListeners.add(listener);
@@ -47,6 +48,9 @@ export function getSyncState(): SyncState {
 }
 
 export function initNetworkListeners() {
+  if (networkListenersInitialized) return;
+  networkListenersInitialized = true;
+
   window.addEventListener('online', () => {
     isOnline = true;
     syncState.status = 'synced';

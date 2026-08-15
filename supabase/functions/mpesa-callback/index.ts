@@ -62,8 +62,9 @@ Deno.serve(async (req: Request) => {
         updated_at: new Date().toISOString(),
       })
       .eq('checkout_request_id', checkoutRequestId)
+      .in('status', ['pending', 'processing'])
       .select()
-      .single();
+      .maybeSingle();
 
     if (kcbError) {
       console.error("Failed to update kcb_payments:", kcbError);
@@ -75,7 +76,7 @@ Deno.serve(async (req: Request) => {
           status: 'completed',
           payment_reference: mpesaReceiptNumber,
           updated_at: new Date().toISOString(),
-        }).eq('id', kcbPayment.transaction_id);
+        }).eq('id', kcbPayment.transaction_id).neq('status', 'completed');
       }
     }
 
@@ -93,15 +94,16 @@ Deno.serve(async (req: Request) => {
         updated_at: new Date().toISOString(),
       })
       .eq('checkout_request_id', checkoutRequestId)
+      .in('status', ['pending', 'processing'])
       .select()
-      .single();
+      .maybeSingle();
 
     if (mpesaTx && status === 'success' && mpesaTx.transaction_id) {
       await supabase.from('transactions').update({
         status: 'completed',
         payment_reference: mpesaReceiptNumber,
         updated_at: new Date().toISOString(),
-      }).eq('id', mpesaTx.transaction_id);
+      }).eq('id', mpesaTx.transaction_id).neq('status', 'completed');
     }
 
     return new Response(JSON.stringify({ ResultCode: 0, ResultDesc: "Success" }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });

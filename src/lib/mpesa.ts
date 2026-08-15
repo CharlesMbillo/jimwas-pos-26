@@ -59,6 +59,10 @@ export async function initiateKCBSTKPush(
     transactionDesc?: string;
   }
 ): Promise<STKPushResponse> {
+  if (!navigator.onLine) {
+    return { success: false, error: 'M-Pesa payments require an internet connection. Reconnect and try again.' };
+  }
+
   // 1. Create local payment record immediately so UI shows pending
   const payment = await createKCBPaymentRecord(phone, amount, {
     transactionId: options?.transactionId,
@@ -141,6 +145,10 @@ export async function initiateKCBSTKPush(
 
 // Check STK Push Status
 export async function checkSTKPushStatus(checkoutRequestId: string): Promise<STKPushStatusResponse> {
+  if (!navigator.onLine) {
+    return { success: false, status: 'processing', error: 'Waiting for an internet connection.' };
+  }
+
   try {
     const response = await fetch(`${SUPABASE_URL}/functions/v1/mpesa-status`, {
       method: 'POST',
