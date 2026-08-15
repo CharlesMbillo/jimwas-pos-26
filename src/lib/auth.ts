@@ -147,20 +147,31 @@ export function getCurrentSession(): SessionData | null {
   }
 }
 
-// Get current user from session
-export async function getCurrentUser(): Promise<User | null> {
-  const session = getCurrentSession();
-  if (!session) return null;
+async function getAuthenticatedUser(): Promise<User | null> {
+  if (!supabase) return null;
 
-  const user = (supabase
-    ? (await supabase.from('users').select('*').eq('id', session.userId).maybeSingle()).data as User | undefined
-    : await getUser(session.userId));
-  if (!user || !user.is_active) {
-    clearSession();
-    return null;
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  if (authError || !authData.user?.email) return null;
+
+  const { data, error } = await supabase
+    .from('users')
+    .select('*')
+    .eq('email', authData.user.email)
+    .maybeSingle();
+
+  if (error || !data || !data.is_active) return null;
+  return data as User;
+}
+
+// Get current user from the Supabase Auth session
+export async function getCurrentUser(): Promise<User | null> {
+  if (supabase) {
+    const user = await getAuthenticatedUser();
+    if (!user) clearSession();
+    return user;
   }
 
-  return user;
+  return null;
 }
 
 // Check if user is locked out
@@ -170,18 +181,15 @@ function isUserLockedOut(user: User): boolean {
   return lockedUntil > new Date();
 }
 
-// Generate session token
-function generateToken(): string {
-  return `${Date.now()}-${Math.random().toString(36).substr(2, 16)}`;
-}
-
 // Login function
 export async function login(username: string, password: string): Promise<LoginResult> {
-  const user = (await getRemoteUserByUsername(username)) ?? await getUserByUsername(username);
+  if (!supabase) {
+    return { success: false, error: 'Authentication service is unavailable' };
+  }
+
+  const user = await getRemoteUserByUsername(username);
 
   if (!user) {
-    // Log failed login attempt
-    await logLoginAttempt('', username, false, 'User not found');
     return { success: false, error: 'Invalid username or password' };
   }
 
@@ -197,10 +205,13 @@ export async function login(username: string, password: string): Promise<LoginRe
     return { success: false, error: `Account locked. Try again after ${new Date(user.locked_until!).toLocaleString()}` };
   }
 
-  // Verify password
-  const validPassword = await verifyPassword(password, user.password_hash);
+  // Supabase Auth owns password verification and session issuance.
+  const { error: signInError } = await supabase.auth.signInWithPassword({
+    email: user.email,
+    password,
+  });
 
-  if (!validPassword) {
+  if (signInError) {
     // Increment failed attempts
     const failedAttempts = user.failed_login_attempts + 1;
     const updates: Partial<User> = {
@@ -239,18 +250,8 @@ export async function login(username: string, password: string): Promise<LoginRe
   await saveUser(updatedUser);
   await updateRemoteUser(updatedUser);
 
-  // Create session
-  const session: SessionData = {
-    userId: user.id,
-    token: generateToken(),
-    loginAt: now,
-    deviceInfo: getDeviceInfo(),
-  };
-
-  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
-  localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(updatedUser));
-
-  // Log successful login
+  // Supabase Auth persists the session securely through its client session storage.
+  // Keep the app-specific login audit record separate from authentication state.
   await logLoginAttempt(user.id, username, true);
 
   return { success: true, user: updatedUser };
@@ -258,23 +259,10 @@ export async function login(username: string, password: string): Promise<LoginRe
 
 // Logout function
 export async function logout(): Promise<void> {
-  const session = getCurrentSession();
-  if (session) {
-    // Get all login history for this user and update the latest one with logout time
-    const { getLoginHistoryByUser } = await import('./db');
-    const history = await getLoginHistoryByUser(session.userId);
-    const currentSession = history.find(h => h.login_at === session.loginAt && !h.logout_at);
-    if (currentSession) {
-      const logoutAt = new Date().toISOString();
-      const duration = Math.round((new Date(logoutAt).getTime() - new Date(currentSession.login_at).getTime()) / 60000);
-      await saveLoginHistory({
-        ...currentSession,
-        logout_at: logoutAt,
-        session_duration_minutes: duration,
-      });
-    }
+  if (supabase) {
+    const { error } = await supabase.auth.signOut();
+    if (error) console.error('[v0] Supabase sign out failed:', error.message);
   }
-
   clearSession();
 }
 
