@@ -4,6 +4,7 @@
 import { generateId, saveUser, getUserByUsername, getUser, saveLoginHistory } from './db';
 import type { User, RoleCode } from './security-types';
 import { getRoleByCode } from './db';
+import { supabase } from './supabaseClient';
 
 // Session storage keys
 const SESSION_KEY = 'pos_session';
@@ -100,6 +101,41 @@ export interface SessionData {
   deviceInfo: string;
 }
 
+async function getRemoteUserByUsername(username: string): Promise<User | undefined> {
+  if (!supabase) return undefined;
+
+  const { data, error } = await supabase
+    .from('users')
+    .select('*')
+    .eq('username', username.trim())
+    .maybeSingle();
+
+  if (error) {
+    console.error('[v0] Supabase user lookup failed:', error.message);
+    return undefined;
+  }
+
+  return data as User | undefined;
+}
+
+async function updateRemoteUser(user: User): Promise<void> {
+  if (!supabase) return;
+
+  const { error } = await supabase
+    .from('users')
+    .update({
+      failed_login_attempts: user.failed_login_attempts,
+      locked_until: user.locked_until ?? null,
+      last_login_at: user.last_login_at ?? null,
+      updated_at: user.updated_at,
+      password_hash: user.password_hash,
+      is_active: user.is_active,
+    })
+    .eq('id', user.id);
+
+  if (error) console.error('[v0] Supabase user update failed:', error.message);
+}
+
 // Get current session
 export function getCurrentSession(): SessionData | null {
   const sessionStr = localStorage.getItem(SESSION_KEY);
@@ -116,7 +152,9 @@ export async function getCurrentUser(): Promise<User | null> {
   const session = getCurrentSession();
   if (!session) return null;
 
-  const user = await getUser(session.userId);
+  const user = (supabase
+    ? (await supabase.from('users').select('*').eq('id', session.userId).maybeSingle()).data as User | undefined
+    : await getUser(session.userId));
   if (!user || !user.is_active) {
     clearSession();
     return null;
@@ -139,7 +177,7 @@ function generateToken(): string {
 
 // Login function
 export async function login(username: string, password: string): Promise<LoginResult> {
-  const user = await getUserByUsername(username);
+  const user = (await getRemoteUserByUsername(username)) ?? await getUserByUsername(username);
 
   if (!user) {
     // Log failed login attempt
@@ -179,7 +217,9 @@ export async function login(username: string, password: string): Promise<LoginRe
     }
 
     // Update user with failed attempt count
-    await saveUser({ ...user, ...updates } as User);
+    const failedUser = { ...user, ...updates } as User;
+    await saveUser(failedUser);
+    await updateRemoteUser(failedUser);
 
     await logLoginAttempt(user.id, username, false, 'Invalid password');
     return { success: false, error: 'Invalid username or password' };
@@ -197,6 +237,7 @@ export async function login(username: string, password: string): Promise<LoginRe
   };
 
   await saveUser(updatedUser);
+  await updateRemoteUser(updatedUser);
 
   // Create session
   const session: SessionData = {
