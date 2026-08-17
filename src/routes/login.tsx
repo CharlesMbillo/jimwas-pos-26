@@ -90,7 +90,7 @@ export function LoginPage() {
             {/* Username Field */}
             <div>
               <label htmlFor="username" className="block text-sm font-medium text-slate-300 mb-2">
-                Username
+                Username or email
               </label>
               <div className="relative">
                 <User className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
@@ -167,7 +167,7 @@ export function LoginPage() {
           {!isCheckingSetup && !hasUsers && showSetup && (
             <form onSubmit={handleFirstAdminSetup} className="mt-6 space-y-4 border-t border-slate-700 pt-6">
               <h2 className="text-lg font-semibold text-white">Create first administrator</h2>
-              <p className="text-sm text-slate-400">This option is available only while no POS users exist.</p>
+              <p className="text-sm text-slate-400">Create the first POS account. Use the email and password below to sign in after setup.</p>
               <div className="relative">
                 <User className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                 <input value={setupName} onChange={(e) => setSetupName(e.target.value)} placeholder="Full name" className="w-full pl-10 pr-4 py-3 bg-slate-700 text-white rounded-lg border border-slate-600" required />

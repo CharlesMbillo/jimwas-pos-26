@@ -128,7 +128,7 @@ export async function setupFirstAdministrator(
   if (!username.trim() || !email.trim() || !fullName.trim()) {
     return { success: false, error: 'All fields are required' };
   }
-  if (password.length < 8 || !/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/\\d/.test(password)) {
+  if (password.length < 8 || !/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/\d/.test(password)) {
     return { success: false, error: 'Password must be at least 8 characters and include uppercase, lowercase, and a number' };
   }
   if (await hasRemoteUsers()) {
@@ -171,18 +171,25 @@ export async function setupFirstAdministrator(
 async function getRemoteUserByUsername(username: string): Promise<User | undefined> {
   if (!supabase) return undefined;
 
-  const { data, error } = await supabase
-    .from('users')
-    .select('*')
-    .eq('username', username.trim())
-    .maybeSingle();
+  const client = supabase;
+  if (!client) return undefined;
+  const identifier = username.trim();
+  const lookup = async (column: 'username' | 'email', value: string) =>
+    client.from('users').select('*').eq(column, value).maybeSingle();
 
-  if (error) {
-    console.error('[v0] Supabase user lookup failed:', error.message);
+  const first = await lookup('username', identifier);
+  if (first.error) {
+    console.error('[v0] Supabase user lookup failed:', first.error.message);
     return undefined;
   }
+  if (first.data) return first.data as User;
 
-  return data as User | undefined;
+  const second = await lookup('email', identifier.toLowerCase());
+  if (second.error) {
+    console.error('[v0] Supabase email lookup failed:', second.error.message);
+    return undefined;
+  }
+  return second.data as User | undefined;
 }
 
 async function updateRemoteUser(user: User): Promise<void> {
