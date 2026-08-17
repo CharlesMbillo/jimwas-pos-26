@@ -154,32 +154,10 @@ export async function setupFirstAdministrator(
     return { success: false, error: authError?.message.includes('already registered') ? 'An account with this email already exists' : 'Unable to create the administrator account' };
   }
 
-  const now = new Date().toISOString();
-  const { error: profileError } = await supabase.from('users').insert({
-    id: authData.user.id,
-    username: username.trim(),
-    email: email.trim().toLowerCase(),
-    password_hash: 'supabase-managed',
-    full_name: fullName.trim(),
-    // role_id is nullable; role_code is the deployed RBAC identifier.
-    role_code: 'admin',
-    is_active: true,
-    failed_login_attempts: 0,
-    created_at: now,
-    updated_at: now,
-    sync_status: 'synced',
-  });
-
-  if (profileError) {
+  // The database trigger creates the matching public.users profile with the
+  // metadata above. This avoids a client-side insert being blocked by RLS.
+  if (authData.session) {
     await supabase.auth.signOut();
-    console.error('[v0] Administrator profile creation failed:', profileError.message, profileError.code);
-    if (profileError.code === '42501') {
-      return { success: false, error: 'Your email must be confirmed before the administrator profile can be created. Check your inbox, then try setup again.' };
-    }
-    if (profileError.code === '23505') {
-      return { success: false, error: 'This username or email is already registered.' };
-    }
-    return { success: false, error: 'Account creation could not finish. Please verify the email and try again.' };
   }
 
   return { success: true };
