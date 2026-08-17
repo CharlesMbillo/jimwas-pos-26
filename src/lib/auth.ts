@@ -4,7 +4,7 @@
 import { generateId, saveUser, getUserByUsername, getUser, saveLoginHistory } from './db';
 import type { User, RoleCode } from './security-types';
 import { getRoleByCode } from './db';
-import { supabase } from './supabaseClient';
+import { initialAuthRedirectError, supabase } from './supabaseClient';
 
 // Session storage keys
 const SESSION_KEY = 'pos_session';
@@ -99,6 +99,31 @@ export interface SetupResult {
   error?: string;
 }
 
+function getAuthCallbackUrl(): string {
+  const configured = import.meta.env.VITE_PUBLIC_SUPABASE_REDIRECT_URL;
+  if (configured && !configured.includes('localhost') && !configured.includes('127.0.0.1')) {
+    return configured;
+  }
+  return `${window.location.origin}/auth/callback`;
+}
+
+export function consumeAuthRedirectError(): string | null {
+  const hash = window.location.hash;
+  if (!hash && !initialAuthRedirectError) return null;
+  const params = new URLSearchParams(hash.replace(/^#/, ''));
+  const errorCode = params.get('error_code') || initialAuthRedirectError;
+  const description = params.get('error_description');
+  if (!errorCode && !description) return null;
+  window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+  if (errorCode === 'otp_expired') {
+    return 'This confirmation link has expired or was already used. Request a new confirmation email and open the newest link.';
+  }
+  if (errorCode === 'access_denied') {
+    return 'Email confirmation was not completed. Request a new confirmation email and try again.';
+  }
+  return 'The email confirmation link could not be completed. Request a new confirmation email and try again.';
+}
+
 export interface SessionData {
   userId: string;
   token: string;
@@ -142,7 +167,7 @@ export async function setupFirstAdministrator(
     email: normalizedEmail,
     password,
     options: {
-      emailRedirectTo: import.meta.env.VITE_PUBLIC_SUPABASE_REDIRECT_URL ?? `${window.location.origin}/auth/callback`,
+      emailRedirectTo: getAuthCallbackUrl(),
       data: {
         username: normalizedUsername,
         full_name: normalizedName,

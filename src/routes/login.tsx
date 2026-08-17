@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { hasRemoteUsers, setupFirstAdministrator } from '../lib/auth';
+import { consumeAuthRedirectError, hasRemoteUsers, setupFirstAdministrator } from '../lib/auth';
 import { Lock, User, Eye, EyeOff, LogIn, AlertCircle, UserPlus, Mail } from 'lucide-react';
 
 export function LoginPage() {
@@ -13,7 +13,7 @@ export function LoginPage() {
   const [setupName, setSetupName] = useState('');
   const [showSetup, setShowSetup] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(() => consumeAuthRedirectError() || '');
   const [isLoading, setIsLoading] = useState(false);
   const [isCheckingSetup, setIsCheckingSetup] = useState(true);
   const [hasUsers, setHasUsers] = useState(true);
