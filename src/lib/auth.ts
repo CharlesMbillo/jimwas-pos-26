@@ -4,7 +4,7 @@
 import { generateId, saveUser, getUserByUsername, getUser, saveLoginHistory } from './db';
 import type { User, RoleCode } from './security-types';
 import { getRoleByCode } from './db';
-import { supabase } from './supabaseClient';
+import { initialAuthRedirectError, supabase } from './supabaseClient';
 
 // Session storage keys
 const SESSION_KEY = 'pos_session';
@@ -94,6 +94,36 @@ export interface LoginResult {
   requiresPasswordChange?: boolean;
 }
 
+export interface SetupResult {
+  success: boolean;
+  error?: string;
+}
+
+function getAuthCallbackUrl(): string {
+  const configured = import.meta.env.VITE_PUBLIC_SUPABASE_REDIRECT_URL;
+  if (configured && !configured.includes('localhost') && !configured.includes('127.0.0.1')) {
+    return configured;
+  }
+  return `${window.location.origin}/auth/callback`;
+}
+
+export function consumeAuthRedirectError(): string | null {
+  const hash = window.location.hash;
+  if (!hash && !initialAuthRedirectError) return null;
+  const params = new URLSearchParams(hash.replace(/^#/, ''));
+  const errorCode = params.get('error_code') || initialAuthRedirectError;
+  const description = params.get('error_description');
+  if (!errorCode && !description) return null;
+  window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+  if (errorCode === 'otp_expired') {
+    return 'This confirmation link has expired or was already used. Request a new confirmation email and open the newest link.';
+  }
+  if (errorCode === 'access_denied') {
+    return 'Email confirmation was not completed. Request a new confirmation email and try again.';
+  }
+  return 'The email confirmation link could not be completed. Request a new confirmation email and try again.';
+}
+
 export interface SessionData {
   userId: string;
   token: string;
@@ -101,21 +131,85 @@ export interface SessionData {
   deviceInfo: string;
 }
 
+export async function hasRemoteUsers(): Promise<boolean> {
+  if (!supabase) return false;
+  const { count, error } = await supabase
+    .from('users')
+    .select('id', { count: 'exact', head: true });
+  if (error) {
+    console.error('[v0] Supabase user count failed:', error.message);
+    return false;
+  }
+  return (count ?? 0) > 0;
+}
+
+export async function setupFirstAdministrator(
+  username: string,
+  email: string,
+  password: string,
+  fullName: string,
+): Promise<SetupResult> {
+  if (!supabase) return { success: false, error: 'Authentication service is unavailable' };
+  if (!username.trim() || !email.trim() || !fullName.trim()) {
+    return { success: false, error: 'All fields are required' };
+  }
+  if (password.length < 8 || !/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/\d/.test(password)) {
+    return { success: false, error: 'Password must be at least 8 characters and include uppercase, lowercase, and a number' };
+  }
+  if (await hasRemoteUsers()) {
+    return { success: false, error: 'An administrator already exists. Sign in or ask an administrator to create your account.' };
+  }
+
+  const normalizedEmail = email.trim().toLowerCase();
+  const normalizedUsername = username.trim();
+  const normalizedName = fullName.trim();
+  const { data: authData, error: authError } = await supabase.auth.signUp({
+    email: normalizedEmail,
+    password,
+    options: {
+      emailRedirectTo: getAuthCallbackUrl(),
+      data: {
+        username: normalizedUsername,
+        full_name: normalizedName,
+        role_code: 'admin',
+      },
+    },
+  });
+  if (authError || !authData.user) {
+    return { success: false, error: authError?.message.includes('already registered') ? 'An account with this email already exists' : 'Unable to create the administrator account' };
+  }
+
+  // The database trigger creates the matching public.users profile with the
+  // metadata above. This avoids a client-side insert being blocked by RLS.
+  if (authData.session) {
+    await supabase.auth.signOut();
+  }
+
+  return { success: true };
+}
+
 async function getRemoteUserByUsername(username: string): Promise<User | undefined> {
   if (!supabase) return undefined;
 
-  const { data, error } = await supabase
-    .from('users')
-    .select('*')
-    .eq('username', username.trim())
-    .maybeSingle();
+  const client = supabase;
+  if (!client) return undefined;
+  const identifier = username.trim();
+  const lookup = async (column: 'username' | 'email', value: string) =>
+    client.from('users').select('*').eq(column, value).maybeSingle();
 
-  if (error) {
-    console.error('[v0] Supabase user lookup failed:', error.message);
+  const first = await lookup('username', identifier);
+  if (first.error) {
+    console.error('[v0] Supabase user lookup failed:', first.error.message);
     return undefined;
   }
+  if (first.data) return first.data as User;
 
-  return data as User | undefined;
+  const second = await lookup('email', identifier.toLowerCase());
+  if (second.error) {
+    console.error('[v0] Supabase email lookup failed:', second.error.message);
+    return undefined;
+  }
+  return second.data as User | undefined;
 }
 
 async function updateRemoteUser(user: User): Promise<void> {
