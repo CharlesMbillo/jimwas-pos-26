@@ -135,9 +135,20 @@ export async function setupFirstAdministrator(
     return { success: false, error: 'An administrator already exists. Sign in or ask an administrator to create your account.' };
   }
 
+  const normalizedEmail = email.trim().toLowerCase();
+  const normalizedUsername = username.trim();
+  const normalizedName = fullName.trim();
   const { data: authData, error: authError } = await supabase.auth.signUp({
-    email: email.trim().toLowerCase(),
+    email: normalizedEmail,
     password,
+    options: {
+      emailRedirectTo: import.meta.env.VITE_PUBLIC_SUPABASE_REDIRECT_URL ?? `${window.location.origin}/auth/callback`,
+      data: {
+        username: normalizedUsername,
+        full_name: normalizedName,
+        role_code: 'admin',
+      },
+    },
   });
   if (authError || !authData.user) {
     return { success: false, error: authError?.message.includes('already registered') ? 'An account with this email already exists' : 'Unable to create the administrator account' };
@@ -150,7 +161,7 @@ export async function setupFirstAdministrator(
     email: email.trim().toLowerCase(),
     password_hash: 'supabase-managed',
     full_name: fullName.trim(),
-    role_id: 'role-admin',
+    // role_id is nullable; role_code is the deployed RBAC identifier.
     role_code: 'admin',
     is_active: true,
     failed_login_attempts: 0,
@@ -161,8 +172,14 @@ export async function setupFirstAdministrator(
 
   if (profileError) {
     await supabase.auth.signOut();
-    console.error('[v0] Administrator profile creation failed:', profileError.message);
-    return { success: false, error: 'Account created, but administrator profile setup failed' };
+    console.error('[v0] Administrator profile creation failed:', profileError.message, profileError.code);
+    if (profileError.code === '42501') {
+      return { success: false, error: 'Your email must be confirmed before the administrator profile can be created. Check your inbox, then try setup again.' };
+    }
+    if (profileError.code === '23505') {
+      return { success: false, error: 'This username or email is already registered.' };
+    }
+    return { success: false, error: 'Account creation could not finish. Please verify the email and try again.' };
   }
 
   return { success: true };
