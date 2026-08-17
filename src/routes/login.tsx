@@ -1,16 +1,26 @@
 // Login Page - Authentication form
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Lock, User, Eye, EyeOff, LogIn, AlertCircle } from 'lucide-react';
+import { hasRemoteUsers, setupFirstAdministrator } from '../lib/auth';
+import { Lock, User, Eye, EyeOff, LogIn, AlertCircle, UserPlus, Mail } from 'lucide-react';
 
 export function LoginPage() {
   const { login, isLoading: authLoading } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [setupEmail, setSetupEmail] = useState('');
+  const [setupName, setSetupName] = useState('');
+  const [showSetup, setShowSetup] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isCheckingSetup, setIsCheckingSetup] = useState(true);
+  const [hasUsers, setHasUsers] = useState(true);
+
+  useEffect(() => {
+    hasRemoteUsers().then(setHasUsers).finally(() => setIsCheckingSetup(false));
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,6 +37,21 @@ export function LoginPage() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleFirstAdminSetup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setIsLoading(true);
+    const result = await setupFirstAdministrator(username, setupEmail, password, setupName);
+    if (!result.success) {
+      setError(result.error || 'Unable to create administrator');
+    } else {
+      setShowSetup(false);
+      setHasUsers(true);
+      setError('Administrator created. Check your email if confirmation is required, then sign in.');
+    }
+    setIsLoading(false);
   };
 
   if (authLoading) {
@@ -127,6 +152,35 @@ export function LoginPage() {
               )}
             </button>
           </form>
+
+          {!isCheckingSetup && !hasUsers && !showSetup && (
+            <button
+              type="button"
+              onClick={() => setShowSetup(true)}
+              className="mt-4 w-full py-3 border border-emerald-500/60 text-emerald-300 rounded-lg font-medium hover:bg-emerald-500/10 transition flex items-center justify-center gap-2"
+            >
+              <UserPlus size={18} />
+              Create first administrator
+            </button>
+          )}
+
+          {!isCheckingSetup && !hasUsers && showSetup && (
+            <form onSubmit={handleFirstAdminSetup} className="mt-6 space-y-4 border-t border-slate-700 pt-6">
+              <h2 className="text-lg font-semibold text-white">Create first administrator</h2>
+              <p className="text-sm text-slate-400">This option is available only while no POS users exist.</p>
+              <div className="relative">
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                <input value={setupName} onChange={(e) => setSetupName(e.target.value)} placeholder="Full name" className="w-full pl-10 pr-4 py-3 bg-slate-700 text-white rounded-lg border border-slate-600" required />
+              </div>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                <input type="email" value={setupEmail} onChange={(e) => setSetupEmail(e.target.value)} placeholder="Email address" className="w-full pl-10 pr-4 py-3 bg-slate-700 text-white rounded-lg border border-slate-600" required />
+              </div>
+              <button type="submit" disabled={isLoading} className="w-full py-3 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 disabled:opacity-50">
+                {isLoading ? 'Creating account...' : 'Create administrator'}
+              </button>
+            </form>
+          )}
 
         </div>
 

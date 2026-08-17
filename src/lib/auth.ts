@@ -94,11 +94,78 @@ export interface LoginResult {
   requiresPasswordChange?: boolean;
 }
 
+export interface SetupResult {
+  success: boolean;
+  error?: string;
+}
+
 export interface SessionData {
   userId: string;
   token: string;
   loginAt: string;
   deviceInfo: string;
+}
+
+export async function hasRemoteUsers(): Promise<boolean> {
+  if (!supabase) return false;
+  const { count, error } = await supabase
+    .from('users')
+    .select('id', { count: 'exact', head: true });
+  if (error) {
+    console.error('[v0] Supabase user count failed:', error.message);
+    return false;
+  }
+  return (count ?? 0) > 0;
+}
+
+export async function setupFirstAdministrator(
+  username: string,
+  email: string,
+  password: string,
+  fullName: string,
+): Promise<SetupResult> {
+  if (!supabase) return { success: false, error: 'Authentication service is unavailable' };
+  if (!username.trim() || !email.trim() || !fullName.trim()) {
+    return { success: false, error: 'All fields are required' };
+  }
+  if (password.length < 8 || !/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/\\d/.test(password)) {
+    return { success: false, error: 'Password must be at least 8 characters and include uppercase, lowercase, and a number' };
+  }
+  if (await hasRemoteUsers()) {
+    return { success: false, error: 'An administrator already exists. Sign in or ask an administrator to create your account.' };
+  }
+
+  const { data: authData, error: authError } = await supabase.auth.signUp({
+    email: email.trim().toLowerCase(),
+    password,
+  });
+  if (authError || !authData.user) {
+    return { success: false, error: authError?.message.includes('already registered') ? 'An account with this email already exists' : 'Unable to create the administrator account' };
+  }
+
+  const now = new Date().toISOString();
+  const { error: profileError } = await supabase.from('users').insert({
+    id: authData.user.id,
+    username: username.trim(),
+    email: email.trim().toLowerCase(),
+    password_hash: 'supabase-managed',
+    full_name: fullName.trim(),
+    role_id: 'role-admin',
+    role_code: 'admin',
+    is_active: true,
+    failed_login_attempts: 0,
+    created_at: now,
+    updated_at: now,
+    sync_status: 'synced',
+  });
+
+  if (profileError) {
+    await supabase.auth.signOut();
+    console.error('[v0] Administrator profile creation failed:', profileError.message);
+    return { success: false, error: 'Account created, but administrator profile setup failed' };
+  }
+
+  return { success: true };
 }
 
 async function getRemoteUserByUsername(username: string): Promise<User | undefined> {
