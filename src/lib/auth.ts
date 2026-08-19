@@ -176,7 +176,14 @@ export async function setupFirstAdministrator(
     },
   });
   if (authError || !authData.user) {
-    return { success: false, error: authError?.message.includes('already registered') ? 'An account with this email already exists' : 'Unable to create the administrator account' };
+    const message = authError?.message.toLowerCase() ?? '';
+    if (message.includes('already registered') || message.includes('already been registered')) {
+      return { success: false, error: 'This email already has an account. Sign in with the email and password you created.' };
+    }
+    if (message.includes('rate limit') || message.includes('too many')) {
+      return { success: false, error: 'Supabase has temporarily rate-limited confirmation emails. Wait before trying again, then use the newest email link.' };
+    }
+    return { success: false, error: authError?.message || 'Unable to create the administrator account' };
   }
 
   // The database trigger creates the matching public.users profile with the
@@ -281,7 +288,26 @@ export async function login(username: string, password: string): Promise<LoginRe
     return { success: false, error: 'Authentication service is unavailable' };
   }
 
-  const user = await getRemoteUserByUsername(username);
+  const identifier = username.trim();
+  const user = await getRemoteUserByUsername(identifier);
+
+  // For email sign-in, authenticate directly with Supabase first. This keeps
+  // login working even when the POS profile lookup is temporarily blocked by RLS.
+  if (!user && identifier.includes('@')) {
+    const { data: authData, error: directSignInError } = await supabase.auth.signInWithPassword({
+      email: identifier.toLowerCase(),
+      password,
+    });
+    if (directSignInError || !authData.user) {
+      return { success: false, error: 'Invalid username or password' };
+    }
+    const profile = await getAuthenticatedUser();
+    if (!profile) {
+      await supabase.auth.signOut();
+      return { success: false, error: 'Your account is confirmed, but its POS profile is missing. Contact an administrator.' };
+    }
+    return { success: true, user: profile };
+  }
 
   if (!user) {
     return { success: false, error: 'Invalid username or password' };
